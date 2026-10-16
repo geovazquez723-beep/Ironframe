@@ -1,0 +1,21 @@
+{
+  "name": "ProjectIronframe",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "IronframeShared": {
+        "$path": "src/ReplicatedStorage/IronframeShared"
+      }
+    },
+    "ServerScriptService": {
+      "IronframeServer": {
+        "$path": "src/ServerScriptService/IronframeServer"
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "$path": "src/StarterPlayer/StarterPlayerScripts"
+      }
+    }
+  }
+}
