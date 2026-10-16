@@ -13,13 +13,21 @@ local ShowroomAnimator = {}
 
 local rigs = setmetatable({}, { __mode = "k" })
 
+-- Parts stream in after the model and its PartCount attribute, so a bind taken too early is
+-- incomplete. Keep rebinding (once per frame) until every part the server built is present, and
+-- do not animate a partial model.
 local function rigFor(model)
+    local expected = model:GetAttribute("PartCount")
     local entry = rigs[model]
-    if not entry or entry.parts ~= model:GetAttribute("PartCount") then
-        entry = { rig = MechRig.Bind(model), parts = model:GetAttribute("PartCount") }
+    if not entry or (not entry.complete) then
+        local rig = MechRig.Bind(model)
+        entry = { rig = rig, complete = (#rig.parts + #rig.linkParts) == expected }
         rigs[model] = entry
     end
-    return entry.rig
+    if entry.complete then
+        return entry.rig
+    end
+    return nil
 end
 
 function ShowroomAnimator.Start()
@@ -30,8 +38,12 @@ function ShowroomAnimator.Start()
         for _, model in ipairs(folder:GetChildren()) do
             local baseCF = model:GetAttribute("BaseCF")
             if baseCF and model:GetAttribute("State") == "OPERATIONAL" and model:GetAttribute("PartCount") then
-                local angles, bob = Showroom.Pose(t, model:GetAttribute("OwnerUserId") or 0)
-                MechRig.Apply(rigFor(model), baseCF * CFrame.new(0, bob, 0), angles)
+                local rig = rigFor(model)
+                if rig then
+                    local angles, bob = Showroom.Pose(t, model:GetAttribute("OwnerUserId") or 0)
+                    MechRig.Apply(rig, baseCF * CFrame.new(0, bob, 0), angles)
+                    model:SetAttribute("ShowroomTorsoYaw", angles.Torso) -- local-only diagnostic (Studio checklist)
+                end
             end
         end
     end)

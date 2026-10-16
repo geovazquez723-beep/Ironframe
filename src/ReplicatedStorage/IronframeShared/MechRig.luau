@@ -31,7 +31,7 @@ end
 export type Rig = {
     model: Model,
     parts: { { part: BasePart, joint: string, localCF: CFrame } },
-    linkParts: { { part: BasePart, link: any, role: string, length: number } },
+    linkParts: { { part: BasePart, link: any, role: string, end_: string, offset: number } },
 }
 
 -- Collect rigged parts from a model built by MechFactory (reads Joint/LocalCF/Link* attributes).
@@ -46,7 +46,8 @@ function MechRig.Bind(model: Model): Rig
                     part = descendant,
                     link = RigSpec.LinksById[linkId],
                     role = descendant:GetAttribute("LinkRole"),
-                    length = descendant.Size.X, -- cylinders run along their X axis
+                    end_ = descendant:GetAttribute("LinkEnd"), -- "A" (housing side) or "B" (rod side)
+                    offset = descendant:GetAttribute("LinkOffset"), -- distance from that end along the link
                 })
             elseif jointName then
                 table.insert(rig.parts, {
@@ -77,7 +78,7 @@ function MechRig.Apply(rig: Rig, rootCF: CFrame, angles: { [string]: number }?)
         local delta = b - a
         local distance = delta.Magnitude
         local unit = if distance > 1e-4 then delta / distance else Vector3.new(0, 1, 0)
-        local center = if entry.role == "Housing" then a + unit * (entry.length / 2) else b - unit * (entry.length / 2)
+        local center = if entry.end_ == "A" then a + unit * entry.offset else b - unit * entry.offset
         table.insert(partList, entry.part)
         -- Cylinder axis is local X; rotate it onto the look direction.
         table.insert(cframes, CFrame.lookAt(center, center + unit) * CFrame.Angles(0, math.pi / 2, 0))

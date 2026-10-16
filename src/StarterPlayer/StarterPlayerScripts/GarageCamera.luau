@@ -8,8 +8,8 @@ local UserInputService = game:GetService("UserInputService")
 
 local GarageCamera = {}
 
-local DEFAULT = { yaw = math.rad(158), pitch = math.rad(12), zoom = 38, focusY = 8.4 }
-local MIN_ZOOM, MAX_ZOOM = 12, 72
+local DEFAULT = { yaw = math.rad(158), pitch = math.rad(12), zoom = 34, focusY = 8.4 }
+local MIN_ZOOM, MAX_ZOOM = 10, 72
 local MIN_PITCH, MAX_PITCH = math.rad(-10), math.rad(72)
 local SMOOTH = 14 -- higher = snappier
 
@@ -46,6 +46,22 @@ function GarageCamera.Reset()
     current.yaw = target.yaw + ((current.yaw - target.yaw + math.pi) % (2 * math.pi) - math.pi)
 end
 
+-- Named inspection views (keys 1-5). yaw 180 = straight in front, 90/270 = sides, 0 = rear.
+local VIEWS = {
+    [Enum.KeyCode.One] = { yaw = 158, pitch = 12, zoom = 34, focusY = 8.4 }, -- front three-quarter (default)
+    [Enum.KeyCode.Two] = { yaw = 90, pitch = 6, zoom = 31, focusY = 8.4 }, -- side profile
+    [Enum.KeyCode.Three] = { yaw = 12, pitch = 14, zoom = 27, focusY = 9 }, -- rear reactor / exhaust
+    [Enum.KeyCode.Four] = { yaw = 150, pitch = 8, zoom = 16, focusY = 12 }, -- chest / cockpit / shoulder detail
+    [Enum.KeyCode.Five] = { yaw = 125, pitch = 5, zoom = 17, focusY = 4 }, -- leg and hydraulic detail
+}
+
+-- degrees in, smooth transition out
+function GarageCamera.SetView(yawDeg, pitchDeg, zoom, focusY)
+    target.yaw = current.yaw + ((math.rad(yawDeg) - current.yaw + math.pi) % (2 * math.pi) - math.pi)
+    target.pitch, target.zoom, target.focusY = math.rad(pitchDeg), zoom, focusY
+    clampTarget()
+end
+
 function GarageCamera.Start(getFocus)
     UserInputService.InputBegan:Connect(function(input, processed)
         if processed then return end
@@ -57,6 +73,9 @@ function GarageCamera.Start(getFocus)
             beginDrag()
         elseif input.KeyCode == Enum.KeyCode.R then
             GarageCamera.Reset()
+        elseif VIEWS[input.KeyCode] then
+            local v = VIEWS[input.KeyCode]
+            GarageCamera.SetView(v.yaw, v.pitch, v.zoom, v.focusY)
         end
     end)
     UserInputService.InputEnded:Connect(function(input)

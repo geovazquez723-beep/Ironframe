@@ -64,3 +64,11 @@ The authoritative compiler and preset selection run server-side. Real PvP will r
 - **Safety**: `EjectionSequence` guarantees `pilotSafe` before any mech hook runs.
 - **Tests**: `SelfTest` (13 cases, runs on server start, shown in UI); `tools/check.sh` runs Luau syntax/lint offline.
   See `STUDIO_CHECKLIST.md` for manual checks.
+
+## Milestone 03 additions
+
+- Bastion rebuilt with layered standoff-mounted armor, shoulder/hip lames, seated weapon mounts, ribbed exhaust,
+  vents, fasteners and clamp-collar hydraulics (~510 parts). Material language documented in `BastionBuilder.luau`.
+- Showroom lighting (key/fill/rim spots, low ambient, subtle bloom); template SpawnLocation hidden at runtime.
+- Garage camera view keys `1`-`5`; fixed an animator bind race that could leave a late-streamed mech static.
+- `ASSET_PIPELINE.md`: Blender -> Roblox workflow (no mesh authored; Blender not available here).

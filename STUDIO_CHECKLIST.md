@@ -24,3 +24,9 @@ Mech
 Safe ejection
 - [ ] TEST SAFE EJECTION: status turns to PILOT_EVACUATED and the capsule appears first; ~1 s later the mech
       disappears; ~4 s later it rebuilds. Camera stays usable throughout. No pilot damage/death text.
+
+M03 visual views (keys, with the garage focused)
+- [ ] `1` front three-quarter, `2` side profile, `3` rear reactor/exhaust, `4` chest/cockpit/shoulder detail, `5` leg/hydraulics.
+- [ ] Armor reads as painted plates with dark gaps over the frame; joint rings are dark metal, not white discs.
+- [ ] No overexposure (white armor) or crushed blacks in any preset; glow limited to visor, canopy, reactor, coils, warheads.
+- [ ] Animation: client-local attribute `ShowroomTorsoYaw` on the mech model changes over time (Explorer, Play client view).

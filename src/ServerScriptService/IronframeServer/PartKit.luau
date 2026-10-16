@@ -88,18 +88,26 @@ function PartKit:glowCylZ(name, joint, length, diameter, cf, color)
     return self:cylZ(name, joint, length, diameter, cf, color, "glow", NEON)
 end
 
--- Two-piece hydraulic (housing + rod) whose ends follow two different joints.
+-- Hydraulic actuator whose ends follow two different joints: housing + clamp collar at A,
+-- rod + rod-end boot at B. Placement is by (end, offset) so MechRig needs no per-part sizes.
 function PartKit:link(spec, housingColor, rodColor)
     local world = MechRig.Solve(CFrame.identity, nil)
     local a = world[spec.jointA]:PointToWorldSpace(spec.pointA)
     local b = world[spec.jointB]:PointToWorldSpace(spec.pointB)
     local rest = (b - a).Magnitude
-    local housing = self:cylX("Hyd_" .. spec.id .. "_Housing", spec.jointA, rest * 0.58, 0.62, CFrame.identity, housingColor, "hydraulic")
-    local rod = self:cylX("Hyd_" .. spec.id .. "_Rod", spec.jointB, rest * 0.64, 0.3, CFrame.identity, rodColor, "hydraulic", Enum.Material.SmoothPlastic)
-    housing:SetAttribute("LinkId", spec.id)
-    housing:SetAttribute("LinkRole", "Housing")
-    rod:SetAttribute("LinkId", spec.id)
-    rod:SetAttribute("LinkRole", "Rod")
+    local function piece(role, joint, length, diameter, color, endName, offset, material)
+        local part = self:cylX("Hyd_" .. spec.id .. "_" .. role, joint, length, diameter, CFrame.identity, color, "hydraulic", material)
+        part:SetAttribute("LinkId", spec.id)
+        part:SetAttribute("LinkRole", role)
+        part:SetAttribute("LinkEnd", endName)
+        part:SetAttribute("LinkOffset", offset)
+        return part
+    end
+    local housingLength, rodLength = rest * 0.58, rest * 0.64
+    local housing = piece("Housing", spec.jointA, housingLength, 0.66, housingColor, "A", housingLength / 2)
+    piece("Collar", spec.jointA, 0.28, 0.95, rodColor, "A", housingLength * 0.72, Enum.Material.Metal)
+    local rod = piece("Rod", spec.jointB, rodLength, 0.3, rodColor, "B", rodLength / 2, Enum.Material.Metal)
+    piece("Boot", spec.jointB, 0.34, 0.58, housingColor, "B", 0.2)
     return housing, rod
 end
 

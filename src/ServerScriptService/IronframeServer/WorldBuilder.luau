@@ -24,15 +24,15 @@ function WorldBuilder.BuildBay(index)
     local steel = Color3.fromRGB(67, 78, 88)
     local light = Color3.fromRGB(245, 160, 60)
     createPart(bay, "Floor", Vector3.new(94, 1, 78), Vector3.new(x, -0.5, 0), floorColor)
-    createPart(bay, "MaintenancePlinth", Vector3.new(29, 1.3, 27), Vector3.new(x, -0.25, 0), steel)
+    createPart(bay, "MaintenancePlinth", Vector3.new(29, 1.3, 27), Vector3.new(x, -0.25, 0), Color3.fromRGB(46, 54, 62), Enum.Material.DiamondPlate)
     for _, sx in ipairs({ -19, 19 }) do
         for _, sz in ipairs({ -15, 15 }) do
             createPart(bay, "GantryPillar", Vector3.new(2, 23, 2), Vector3.new(x+sx, 11, sz), steel)
             local lamp = createPart(bay, "SafetyLamp", Vector3.new(2.5, 0.5, 2.5),
                 Vector3.new(x+sx, 21.5, sz), light, Enum.Material.Neon)
             local pointLight = Instance.new("PointLight")
-            pointLight.Range = 26
-            pointLight.Brightness = 2.3
+            pointLight.Range = 20
+            pointLight.Brightness = 0.9
             pointLight.Color = light
             pointLight.Parent = lamp
         end
@@ -58,9 +58,9 @@ function WorldBuilder.BuildBay(index)
         -- Aim the beam at the mech by rotating the housing toward the plinth centre.
         housing.CFrame = CFrame.lookAt(housing.Position, Vector3.new(x, 8, 0)) * CFrame.Angles(math.pi / 2, 0, 0)
     end
-    spot("KeyLight", Vector3.new(-14, 18, -32), Color3.fromRGB(255, 244, 228), 2.5, 120)
-    spot("FillLight", Vector3.new(20, 16, -30), Color3.fromRGB(190, 215, 255), 1.5, 120)
-    spot("RimLight", Vector3.new(0, 24, 28), Color3.fromRGB(120, 210, 255), 0.8)
+    spot("KeyLight", Vector3.new(-14, 18, -32), Color3.fromRGB(255, 244, 228), 1.2, 120)
+    spot("FillLight", Vector3.new(20, 16, -30), Color3.fromRGB(190, 215, 255), 0.7, 120)
+    spot("RimLight", Vector3.new(0, 24, 28), Color3.fromRGB(120, 210, 255), 0.8, 90)
     return Vector3.new(x, 0.45, 0)
 end
 
@@ -75,11 +75,41 @@ function WorldBuilder.Initialize()
         mechs.Name = "IronframeMechs"
         mechs.Parent = workspace
     end
-    Lighting.ClockTime = 19.5
-    Lighting.Brightness = 2.2
+    -- The template SpawnLocation sits under bay 1's mech; hide it (runtime only, not saved). Avatars are
+    -- parked at the operator station by Main anyway.
+    for _, spawn in ipairs(workspace:GetDescendants()) do
+        if spawn:IsA("SpawnLocation") then
+            spawn.Transparency = 1
+            spawn.CanCollide = false
+            for _, child in ipairs(spawn:GetChildren()) do
+                if child:IsA("Decal") or child:IsA("Texture") then child:Destroy() end
+            end
+        end
+    end
+
+    -- Showroom lighting: low ambient + key/fill/rim spots (see BuildBay) so armor, frame and glow
+    -- separate cleanly without clipping to white or sinking to black.
+    Lighting.ClockTime = 0
+    Lighting.Brightness = 1.3
     Lighting.ExposureCompensation = 0
-    Lighting.Ambient = Color3.fromRGB(70, 80, 94)
-    Lighting.OutdoorAmbient = Color3.fromRGB(60, 70, 85)
+    Lighting.Ambient = Color3.fromRGB(50, 57, 68)
+    Lighting.OutdoorAmbient = Color3.fromRGB(52, 60, 72)
+    Lighting.EnvironmentDiffuseScale = 0.3
+    Lighting.EnvironmentSpecularScale = 0.3
+    Lighting.GlobalShadows = true
+    if not Lighting:FindFirstChild("IronframeBloom") then
+        local bloom = Instance.new("BloomEffect")
+        bloom.Name = "IronframeBloom"
+        bloom.Intensity = 0.12
+        bloom.Size = 20
+        bloom.Threshold = 2.2
+        bloom.Parent = Lighting
+        local grade = Instance.new("ColorCorrectionEffect")
+        grade.Name = "IronframeGrade"
+        grade.Contrast = 0.08
+        grade.Saturation = 0.05
+        grade.Parent = Lighting
+    end
     print("[IF-STEP-01] Industrial garage world initialized")
 end
 
