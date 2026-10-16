@@ -1,7 +1,5 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("IronframeRemotes")
 local getState = remotes:WaitForChild("GetGarageState")
@@ -50,8 +48,8 @@ local function button(parent, name, text, pos, action)
 end
 local panel = Instance.new("Frame")
 panel.Name = "StatsPanel"
-panel.Size = UDim2.fromOffset(324, 505)
-panel.Position = UDim2.new(0, 22, 0.5, -252)
+panel.Size = UDim2.fromOffset(324, 585)
+panel.Position = UDim2.new(0, 22, 0.5, -292)
 panel.BackgroundColor3 = Color3.fromRGB(17, 24, 32)
 panel.BackgroundTransparency = 0.1
 panel.BorderSizePixel = 0
@@ -68,7 +66,8 @@ button(panel, "Energy", "PLASMA SPECIALIST", UDim2.fromOffset(18, 324), function
 button(panel, "Missile", "MISSILE BARRAGE", UDim2.fromOffset(18, 370), function() setPreset:FireServer("MISSILE") end)
 button(panel, "Eject", "TEST SAFE EJECTION", UDim2.fromOffset(18, 431), function() requestEject:FireServer() end)
 local status = label(panel, "Status", "System nominal", UDim2.fromOffset(288, 25), UDim2.fromOffset(17, 478), Color3.fromRGB(255, 178, 66), 13)
-local tip = label(gui, "CameraTip", "RIGHT-DRAG  Orbit camera     •     SCROLL  Zoom     •     Ejection always safe", UDim2.new(0.8, 0, 0, 30), UDim2.new(0, 364, 1, -46), Color3.fromRGB(230, 238, 241), 14)
+local diag = label(panel, "Diagnostics", "", UDim2.fromOffset(288, 70), UDim2.fromOffset(17, 508), Color3.fromRGB(140, 200, 160), 12)
+local tip = label(gui, "CameraTip", "RIGHT-DRAG  Orbit  •  MIDDLE-DRAG  Focus height  •  R  Reset view     •     SCROLL  Zoom     •     Ejection always safe", UDim2.new(0.8, 0, 0, 30), UDim2.new(0, 364, 1, -46), Color3.fromRGB(230, 238, 241), 14)
 tip.TextXAlignment = Enum.TextXAlignment.Center
 
 local function display(data)
@@ -84,6 +83,14 @@ local function display(data)
         m.nominalDps, m.integrity, m.equippedWeapons
     )
     status.Text = data.message .. " [" .. data.machineState .. "]"
+    local dg = data.diagnostics
+    if dg then
+        local t, r = dg.tests, dg.rig
+        diag.Text = string.format("DIAGNOSTICS\nSELF-TEST  %d / %d %s\nRIG  %d parts  %d joints  %d hydraulics\nSOCKETS  %d / %d    ARMOR PANELS  %d\nPILOT  %s",
+            t.passed, t.total, (#t.failed == 0) and "PASS" or ("FAIL: " .. table.concat(t.failed, ", ")),
+            r.parts, r.joints, r.links, r.socketsFilled, r.socketsTotal, r.armorPanels,
+            data.pilotSafe and "SAFE / UNTARGETABLE" or "SAFE")
+    end
     print(string.format("[IF-CLIENT] preset=%s mass=%.1f power=%.1f", data.presetId, m.mass, m.powerDraw))
 end
 
@@ -91,38 +98,15 @@ stateChanged.OnClientEvent:Connect(display)
 local ok, result = pcall(function() return getState:InvokeServer() end)
 if ok then display(result) else warn("[IF-CLIENT] GetGarageState failed:", result) end
 
-local orbitYaw = math.rad(155)
-local orbitPitch = math.rad(12)
-local zoom = 34
-local drag = false
-UserInputService.InputBegan:Connect(function(input, _processed)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        drag = true
-        print("[IF-CAMERA] Orbit drag started")
-    end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then drag = false end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseWheel then
-        zoom = math.clamp(zoom - input.Position.Z * 3, 22, 62)
-    elseif drag and input.UserInputType == Enum.UserInputType.MouseMovement then
-        orbitYaw -= input.Delta.X * 0.008
-        orbitPitch = math.clamp(orbitPitch - input.Delta.Y * 0.004, math.rad(-9), math.rad(36))
-    end
-end)
+local GarageCamera = require(script.Parent:WaitForChild("GarageCamera"))
+local AvatarHider = require(script.Parent:WaitForChild("AvatarHider"))
+local ShowroomAnimator = require(script.Parent:WaitForChild("ShowroomAnimator"))
 
-RunService:BindToRenderStep("IronframeGarageCamera", Enum.RenderPriority.Camera.Value + 1, function()
+AvatarHider.Start()
+ShowroomAnimator.Start()
+GarageCamera.Start(function()
     local folder = workspace:FindFirstChild("IronframeMechs")
     local model = folder and folder:FindFirstChild(tostring(player.UserId))
-    if not model then return end
-    local target = model:GetPivot().Position + Vector3.new(0, 9, 0)
-    local vector = Vector3.new(math.sin(orbitYaw)*math.cos(orbitPitch), math.sin(orbitPitch), math.cos(orbitYaw)*math.cos(orbitPitch))
-    local camera = workspace.CurrentCamera
-    if camera then
-        camera.CameraType = Enum.CameraType.Scriptable
-        camera.CFrame = CFrame.lookAt(target + vector*zoom, target)
-        camera.FieldOfView = 50
-    end
+    local base = model and model:GetAttribute("BaseCF")
+    return base and base.Position or nil
 end)

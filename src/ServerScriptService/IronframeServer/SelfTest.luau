@@ -1,0 +1,205 @@
+-- Focused self tests. Run at server start (results shown in the garage UI) and callable from the
+-- Studio command bar: require(game.ServerScriptService.IronframeServer.SelfTest).Run()
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Shared = ReplicatedStorage:WaitForChild("IronframeShared")
+local Compiler = require(Shared:WaitForChild("LoadoutCompiler"))
+local Loadouts = require(Shared:WaitForChild("Loadouts"))
+local Components = require(Shared:WaitForChild("ComponentRegistry"))
+local RigSpec = require(Shared:WaitForChild("RigSpec"))
+local MechRig = require(Shared:WaitForChild("MechRig"))
+local Showroom = require(Shared:WaitForChild("Showroom"))
+local Factory = require(script.Parent.MechFactory)
+local Ejection = require(script.Parent.EjectionSequence)
+
+local SelfTest = {}
+
+local function clone(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for k, v in pairs(value) do copy[k] = clone(v) end
+    return copy
+end
+
+local function hasIssue(result, fragment)
+    for _, issue in ipairs(result.issues) do
+        if string.find(issue, fragment, 1, true) then return true end
+    end
+    return false
+end
+
+local function preset(id) return clone(Loadouts.presets[id]) end
+
+local tests = {}
+local function test(name, fn) table.insert(tests, { name = name, fn = fn }) end
+
+test("all presets compile valid", function()
+    for _, id in ipairs(Loadouts.order) do
+        local r = Compiler.Compile(Loadouts.presets[id])
+        assert(r.valid, id .. ": " .. table.concat(r.issues, "; "))
+    end
+end)
+
+test("compat: oversized weapon in small socket rejected", function()
+    local l = preset("BALANCED")
+    l.mounts.left_shoulder = "W_PLASMA_CANNON" -- size 3 into size-2 socket
+    assert(hasIssue(Compiler.Compile(l), "Incompatible weapon in left_shoulder"))
+end)
+
+test("compat: missile family rejected from torso socket", function()
+    local l = preset("BALANCED")
+    l.mounts.left_torso = "W_MISSILE_POD"
+    assert(hasIssue(Compiler.Compile(l), "Incompatible weapon in left_torso"))
+end)
+
+test("compat: unknown socket rejected", function()
+    local l = preset("BALANCED")
+    l.mounts.back_hump = "W_MICRO_LASER"
+    assert(hasIssue(Compiler.Compile(l), "Unknown weapon socket"))
+end)
+
+test("compat: empty socket is legal", function()
+    local l = preset("BALANCED")
+    l.mounts.left_torso = nil
+    local r = Compiler.Compile(l)
+    assert(r.valid and r.metrics.equippedWeapons == 5)
+end)
+
+test("overweight build rejected", function()
+    local l = preset("ENERGY")
+    l.systems = { reactor = "CORE_300", cooling = "RAD_ADVANCED", armor = "ARMOR_REINFORCED" }
+    l.mounts.right_arm = "W_PLASMA_CANNON"
+    local r = Compiler.Compile(l)
+    assert(r.metrics.mass > r.metrics.massLimit, "build was not actually overweight")
+    assert(not r.valid and hasIssue(r, "Mass limit exceeded"))
+end)
+
+test("invalid component IDs rejected", function()
+    local l = preset("BALANCED")
+    l.systems.reactor = "CORE_NOPE"
+    l.mounts.right_arm = "W_NOPE"
+    local r = Compiler.Compile(l)
+    assert(not r.valid and hasIssue(r, "Invalid component for system slot: reactor") and hasIssue(r, "Unknown weapon in right_arm"))
+    local wrongClass = preset("BALANCED")
+    wrongClass.systems.armor = "CORE_220" -- real ID, wrong class
+    assert(hasIssue(Compiler.Compile(wrongClass), "system slot: armor"))
+    assert(not Compiler.Compile({ chassisId = "NOPE", systems = {}, mounts = {} }).valid)
+    assert(not Compiler.Compile(nil).valid)
+end)
+
+test("power overdraw rejected", function()
+    -- Temporary weak reactor so the check is exercised without changing shipped balance.
+    Components.TEST_WEAK_CORE = { name = "Test Weak Core", class = "reactor", mass = 1, powerOutput = 10 }
+    local ok, err = pcall(function()
+        local l = preset("ENERGY")
+        l.systems.reactor = "TEST_WEAK_CORE"
+        local r = Compiler.Compile(l)
+        assert(r.metrics.powerDraw > r.metrics.powerOutput)
+        assert(not r.valid and hasIssue(r, "Reactor power budget exceeded"))
+    end)
+    Components.TEST_WEAK_CORE = nil
+    assert(ok, err)
+end)
+
+test("rig: every preset binds all joints, 6 sockets, hydraulics", function()
+    for _, id in ipairs(Loadouts.order) do
+        local model = Factory.Create(1, id, Loadouts.presets[id], Vector3.new(0, 0, 0))
+        local d = Factory.Describe(model)
+        assert(d.socketsFilled == 6, id .. " sockets=" .. d.socketsFilled)
+        assert(d.joints == #RigSpec.Joints, id .. " joints=" .. d.joints)
+        assert(d.links == #RigSpec.Links, id .. " links=" .. d.links)
+        assert(d.armorPanels >= 40, id .. " armor panels=" .. d.armorPanels)
+        assert(model.PrimaryPart ~= nil)
+        assert(model:GetAttribute("PilotTargetable") == false)
+        assert(not model:FindFirstChildWhichIsA("Humanoid", true), "mech must not contain a pilot humanoid")
+        model:Destroy()
+    end
+end)
+
+test("rig: weapons stay attached while torso turns", function()
+    local model = Factory.Create(1, "BALANCED", Loadouts.presets.BALANCED, Vector3.new(0, 0, 0))
+    local rig = MechRig.Bind(model)
+    local rootCF = CFrame.new(0, 0, 0)
+    local function snapshot(angles)
+        local world = MechRig.Solve(rootCF, angles)
+        MechRig.Apply(rig, rootCF, angles)
+        local rel = {}
+        for _, entry in ipairs(rig.parts) do
+            if string.sub(entry.part.Name, 1, 7) == "Weapon_" then
+                rel[entry.part] = world[entry.joint]:ToObjectSpace(entry.part.CFrame)
+            end
+        end
+        return rel
+    end
+    local rest = snapshot(nil)
+    local movedBefore = {}
+    for part in pairs(rest) do movedBefore[part] = part.Position end
+    local turned = snapshot({ Torso = math.rad(45), ElbowL = math.rad(70) })
+    local count, moved = 0, 0
+    for part, relRest in pairs(rest) do
+        count += 1
+        local d = (relRest.Position - turned[part].Position).Magnitude
+        assert(d < 1e-3, part.Name .. " detached by " .. d)
+        if (part.Position - movedBefore[part]).Magnitude > 0.5 then moved += 1 end
+    end
+    assert(count > 30, "too few weapon parts: " .. count)
+    assert(moved > 0, "torso turn did not move weapons")
+    model:Destroy()
+end)
+
+test("showroom: deterministic and within limits", function()
+    local a, bobA = Showroom.Pose(12.34, 1.5)
+    local b, bobB = Showroom.Pose(12.34, 1.5)
+    assert(bobA == bobB)
+    for name, angle in pairs(a) do
+        assert(angle == b[name])
+        local j = RigSpec.JointsByName[name]
+        assert(math.abs(angle - j.rest) <= j.limit + 1e-6, name .. " out of limit")
+    end
+end)
+
+test("ejection: pilot safe before any mech hook; never targetable", function()
+    local session = { pilotSafe = false, machineState = "OPERATIONAL" }
+    local log = {}
+    local function mark(tag)
+        assert(session.pilotSafe == true, tag .. " ran before pilot was safe")
+        assert(Ejection.IsPilotTargetable(session) == false)
+        table.insert(log, tag)
+    end
+    Ejection.Run(session, {
+        onPilotSafe = function() mark("safe") end,
+        onMechDisabled = function() mark("disabled") end,
+        onCleanup = function() mark("cleanup") end,
+        onRebuild = function() mark("rebuild") end,
+        isStale = function() return false end,
+    }, function(_, fn) fn() end)
+    assert(table.concat(log, ",") == "safe,disabled,cleanup,rebuild", table.concat(log, ","))
+    assert(session.pilotSafe and session.pilotTargetable == false)
+end)
+
+test("ejection: stale session never rebuilds but pilot stays safe", function()
+    local session = { pilotSafe = false }
+    local rebuilt = false
+    Ejection.Run(session, {
+        onPilotSafe = function() end, onMechDisabled = function() end, onCleanup = function() end,
+        onRebuild = function() rebuilt = true end, isStale = function() return true end,
+    }, function(_, fn) fn() end)
+    assert(not rebuilt and session.pilotSafe)
+end)
+
+function SelfTest.Run()
+    local result = { passed = 0, total = #tests, failed = {} }
+    for _, t in ipairs(tests) do
+        local ok, err = pcall(t.fn)
+        if ok then
+            result.passed += 1
+        else
+            table.insert(result.failed, t.name)
+            warn(string.format("[IF-TEST] FAIL %s: %s", t.name, tostring(err)))
+        end
+    end
+    print(string.format("[IF-TEST] %d/%d passed", result.passed, result.total))
+    return result
+end
+
+return SelfTest

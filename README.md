@@ -1,4 +1,4 @@
-# PROJECT IRONFRAME — Milestone 01 starter
+# PROJECT IRONFRAME — Milestone 02 (mech rig + hard-surface blockout)
 
 A self-contained **Rojo v7** starter for an original, mech-first Roblox game. This is a functional, deliberately primitive **garage demonstration**, not the finished visual target or a combat simulator.
 
@@ -50,3 +50,17 @@ The authoritative compiler and preset selection run server-side. Real PvP will r
 **Permanent invariant:** Mechs may be disabled; pilots never die. On terminal damage, set `pilotSafe = true` and transition to safe evacuation **before** mech destruction VFX. Pilots/capsules are never targetable. Avoid kills/deaths language in final stats.
 
 **Performance:** For the future, use meshes and a kinematic/animatable rig, not hundreds of unconstrained simulated parts; adopt LOD/streaming for large maps. This first garage uses anchored parts and cannot walk.
+
+## Milestone 02 additions
+
+- **Rig contract** (`RigSpec.luau`): 14 joints (hip, torso yaw, head, 2x shoulder/elbow, 2x thigh/knee/ankle), 6 weapon
+  sockets bound to joints, 10 hydraulic links, documented axes (mech faces -Z, +X is right). `MechRig` solves/applies
+  poses to anchored parts only - no physics constraints.
+- **Procedural Bastion** (`BastionBuilder`, `WeaponModules`, `PartKit`): layered armor panels, recessed cockpit, reactor
+  and exhaust stacks, joint collars, per-preset paint/variants, five distinct weapon modules. Drop a MeshPart named like a
+  procedural part into `ServerStorage/IronframeAssets/IF42_BASTION/` and it replaces it with the same joint/LocalCF.
+- **Showroom animation** (`Showroom` + client `ShowroomAnimator`): deterministic idle sway/torso turn/head scan.
+- **Garage camera/avatar**: `GarageCamera` (smooth orbit/zoom/reset), `AvatarHider` (client-only, non-destructive).
+- **Safety**: `EjectionSequence` guarantees `pilotSafe` before any mech hook runs.
+- **Tests**: `SelfTest` (13 cases, runs on server start, shown in UI); `tools/check.sh` runs Luau syntax/lint offline.
+  See `STUDIO_CHECKLIST.md` for manual checks.

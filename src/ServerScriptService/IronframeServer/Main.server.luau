@@ -5,9 +5,12 @@ local Shared = ReplicatedStorage:WaitForChild("IronframeShared")
 local Loadouts = require(Shared:WaitForChild("Loadouts"))
 local Compiler = require(Shared:WaitForChild("LoadoutCompiler"))
 local Factory = require(script.Parent.MechFactory)
+local Ejection = require(script.Parent.EjectionSequence)
+local SelfTest = require(script.Parent.SelfTest)
 local WorldBuilder = require(script.Parent.WorldBuilder)
 
 local sessions = {}
+local selfTestResult = { passed = 0, total = 0, failed = {} }
 local bayCounter = 0
 local remotes = Instance.new("Folder")
 remotes.Name = "IronframeRemotes"
@@ -58,6 +61,11 @@ local function publicState(player, message)
         },
         compiled = Compiler.Compile(loadout),
         machineState = session.machineState,
+        pilotSafe = session.pilotSafe,
+        diagnostics = {
+            tests = selfTestResult,
+            rig = Factory.Describe(session.mech),
+        },
         message = message or "System nominal",
     }
 end
@@ -68,7 +76,7 @@ local function assemble(player)
     if session.mech then
         session.mech:Destroy()
     end
-    local model = Factory.Create(player.UserId, Loadouts.presets[session.presetId], session.bayPosition)
+    local model = Factory.Create(player.UserId, session.presetId, Loadouts.presets[session.presetId], session.bayPosition)
     model.Parent = workspace.IronframeMechs
     session.mech = model
     session.machineState = "OPERATIONAL"
@@ -78,6 +86,7 @@ end
 
 WorldBuilder.Initialize()
 validatePresets()
+selfTestResult = SelfTest.Run()
 
 GetGarageState.OnServerInvoke = function(player)
     return publicState(player)
@@ -105,47 +114,47 @@ RequestTestEject.OnServerEvent:Connect(function(player)
     if os.clock() - session.lastEject < 8 then return end
     session.lastEject = os.clock()
 
-    -- SAFETY INVARIANT: The pilot is confirmed evacuated BEFORE any mech effects run.
-    -- Pilot HP does not exist; the capsule cannot be targeted or harmed.
-    session.pilotSafe = true
-    session.machineState = "PILOT_EVACUATED"
-    session.mech:SetAttribute("State", "PILOT_EVACUATED")
-    StateChanged:FireClient(player, publicState(player, "PILOT SAFE — EMERGENCY EJECTION"))
-
-    local pod = Instance.new("Part")
-    pod.Name = "InvulnerableEscapeCapsule"
-    pod.Shape = Enum.PartType.Ball
-    pod.Size = Vector3.new(2.1, 3.0, 2.1)
-    pod.Color = Color3.fromRGB(255, 179, 65)
-    pod.Material = Enum.Material.Metal
-    pod.Anchored = true
-    pod.CanCollide = false
-    pod.Position = session.bayPosition + Vector3.new(0, 15.5, 0)
-    pod.Parent = workspace
-    local tween = TweenService:Create(pod, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Position = pod.Position + Vector3.new(0, 27, -6)
+    local pod
+    -- SAFETY INVARIANT (enforced inside Ejection.Run): pilotSafe is set before any hook below runs.
+    Ejection.Run(session, {
+        onPilotSafe = function()
+            session.mech:SetAttribute("State", "PILOT_EVACUATED")
+            StateChanged:FireClient(player, publicState(player, "PILOT SAFE - EMERGENCY EJECTION"))
+            pod = Instance.new("Part")
+            pod.Name = "InvulnerableEscapeCapsule"
+            pod.Shape = Enum.PartType.Ball
+            pod.Size = Vector3.new(2.1, 3.0, 2.1)
+            pod.Color = Color3.fromRGB(255, 179, 65)
+            pod.Material = Enum.Material.Metal
+            pod.Anchored = true
+            pod.CanCollide = false
+            pod.CanQuery = false
+            pod.CanTouch = false
+            pod:SetAttribute("Targetable", false)
+            pod.Position = session.bayPosition + Vector3.new(0, 15.5, 0)
+            pod.Parent = workspace
+            TweenService:Create(pod, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Position = pod.Position + Vector3.new(0, 27, -6)
+            }):Play()
+            print(string.format("[IF-STEP-04] Guaranteed safe ejection for userId %d", player.UserId))
+        end,
+        onMechDisabled = function()
+            if session.mech then
+                session.mech:Destroy()
+                session.mech = nil
+            end
+            StateChanged:FireClient(player, publicState(player, "Mech disabled. Pilot safe. Rebuilding..."))
+        end,
+        onCleanup = function()
+            if pod then pod:Destroy() end
+        end,
+        onRebuild = function()
+            assemble(player)
+        end,
+        isStale = function()
+            return sessions[player] ~= session
+        end,
     })
-    tween:Play()
-    print(string.format("[IF-STEP-04] Guaranteed safe ejection for userId %d", player.UserId))
-
-    task.delay(1.0, function()
-        if sessions[player] ~= session then
-            pod:Destroy()
-            return
-        end
-        session.machineState = "MECH_DISABLED"
-        if session.mech then
-            session.mech:Destroy()
-            session.mech = nil
-        end
-        StateChanged:FireClient(player, publicState(player, "Mech disabled. Pilot safe. Rebuilding..."))
-    end)
-    task.delay(4.0, function()
-        pod:Destroy()
-        if sessions[player] ~= session then return end
-        session.pilotSafe = true
-        assemble(player)
-    end)
 end)
 
 local function playerAdded(player)
@@ -159,6 +168,15 @@ local function playerAdded(player)
         machineState = "INIT",
         pilotSafe = true,
     }
+    -- Park the (client-hidden) avatar at the operator station, away from the mech. Never harmed/removed.
+    local function park(character)
+        task.defer(function()
+            if sessions[player] == nil or not character.Parent then return end
+            character:PivotTo(CFrame.new(position + Vector3.new(0, 4, 26)))
+        end)
+    end
+    player.CharacterAdded:Connect(park)
+    if player.Character then park(player.Character) end
     assemble(player)
     print(string.format("[IF-STEP-05] Garage ready for userId %d; bay=%d", player.UserId, bayCounter))
 end

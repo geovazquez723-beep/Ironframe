@@ -39,9 +39,28 @@ function WorldBuilder.BuildBay(index)
     end
     createPart(bay, "OverheadRailFront", Vector3.new(40, 1.2, 1.4), Vector3.new(x, 22, -15), steel)
     createPart(bay, "OverheadRailRear", Vector3.new(40, 1.2, 1.4), Vector3.new(x, 22, 15), steel)
-    createPart(bay, "RearWall", Vector3.new(92, 29, 1), Vector3.new(x, 14, 37), floorColor)
+    createPart(bay, "RearWall", Vector3.new(92, 29, 1), Vector3.new(x, 14, 37), Color3.fromRGB(52, 62, 74))
     createPart(bay, "SafetyLineA", Vector3.new(33, 0.1, 0.5), Vector3.new(x, 0.08, -17), light, Enum.Material.Neon)
     createPart(bay, "SafetyLineB", Vector3.new(33, 0.1, 0.5), Vector3.new(x, 0.08, 17), light, Enum.Material.Neon)
+    -- Key / fill / rim lights so armor layering reads clearly in the showroom.
+    local function spot(name, offset, color, brightness, range)
+        local housing = createPart(bay, name, Vector3.new(2, 1, 2), Vector3.new(x, 0, 0) + offset, steel)
+        housing.Transparency = 1 -- emitter only; a solid housing would self-occlude its own beam
+        housing.CanCollide = false
+        local light = Instance.new("SpotLight")
+        light.Face = Enum.NormalId.Bottom
+        light.Angle = 80
+        light.Range = range or 70
+        light.Brightness = brightness
+        light.Color = color
+        light.Shadows = false
+        light.Parent = housing
+        -- Aim the beam at the mech by rotating the housing toward the plinth centre.
+        housing.CFrame = CFrame.lookAt(housing.Position, Vector3.new(x, 8, 0)) * CFrame.Angles(math.pi / 2, 0, 0)
+    end
+    spot("KeyLight", Vector3.new(-14, 18, -32), Color3.fromRGB(255, 244, 228), 2.5, 120)
+    spot("FillLight", Vector3.new(20, 16, -30), Color3.fromRGB(190, 215, 255), 1.5, 120)
+    spot("RimLight", Vector3.new(0, 24, 28), Color3.fromRGB(120, 210, 255), 0.8)
     return Vector3.new(x, 0.45, 0)
 end
 
@@ -58,8 +77,9 @@ function WorldBuilder.Initialize()
     end
     Lighting.ClockTime = 19.5
     Lighting.Brightness = 2.2
-    Lighting.Ambient = Color3.fromRGB(53, 62, 74)
-    Lighting.OutdoorAmbient = Color3.fromRGB(43, 51, 63)
+    Lighting.ExposureCompensation = 0
+    Lighting.Ambient = Color3.fromRGB(70, 80, 94)
+    Lighting.OutdoorAmbient = Color3.fromRGB(60, 70, 85)
     print("[IF-STEP-01] Industrial garage world initialized")
 end
 
