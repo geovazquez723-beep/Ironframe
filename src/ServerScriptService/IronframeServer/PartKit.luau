@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("IronframeShared")
 local RigSpec = require(Shared:WaitForChild("RigSpec"))
 local MechRig = require(Shared:WaitForChild("MechRig"))
+local AssetLibrary = require(script.Parent.AssetLibrary)
 
 local PartKit = {}
 PartKit.__index = PartKit
@@ -29,7 +30,7 @@ local function findImported(chassisId: string, partName: string): BasePart?
 end
 
 function PartKit.new(model: Model, chassisId: string)
-    return setmetatable({ model = model, chassisId = chassisId, counts = {}, imported = 0 }, PartKit)
+    return setmetatable({ model = model, chassisId = chassisId, counts = {}, imported = 0, meshParts = 0, assemblies = {}, missingAssets = {} }, PartKit)
 end
 
 function PartKit:add(name, joint, size, localCF, color, material, group, shape)
@@ -78,6 +79,60 @@ end
 
 function PartKit:cylZ(name, joint, length, diameter, cf, color, group, material)
     return self:add(name, joint, Vector3.new(length, diameter, diameter), cf * CFrame.Angles(0, math.pi / 2, 0), color, material, group, Enum.PartType.Cylinder)
+end
+
+-- Places an AI-generated multipart asset (AssetLibrary template `spec.asset`) as rigged parts of one joint.
+--   spec.joint, spec.cf     joint-local CFrame of the asset's bounding-box centre (front = -Z, up = +Y)
+--   spec.scale              number or Vector3, applied to every part's size and offset
+--   spec.name               part-name prefix; multipart assets get _<index> (stable: sorted by mesh part name)
+--   spec.color / material   tint and surface applied to every part (the baked texture stays visible)
+-- Returns the list of parts, or nil when the asset is unavailable so the caller can build the procedural
+-- fallback. Mesh geometry is never edited, only scaled; the rig only ever sees Joint/LocalCF attributes.
+function PartKit:mesh(spec)
+    local template = AssetLibrary.Template(spec.asset)
+    if not template then
+        self.missingAssets[spec.asset] = true
+        return nil
+    end
+    local pivotCF = template:GetBoundingBox()
+    local scale = spec.scale or 1
+    local scaleV = if typeof(scale) == "Vector3" then scale else Vector3.new(scale, scale, scale)
+    local meshParts = {}
+    for _, d in ipairs(template:GetDescendants()) do
+        if d:IsA("MeshPart") then
+            table.insert(meshParts, d)
+        end
+    end
+    table.sort(meshParts, function(a, b) return a.Name < b.Name end)
+    local placed = {}
+    for index, source in ipairs(meshParts) do
+        local rel = pivotCF:ToObjectSpace(source.CFrame)
+        local part = source:Clone()
+        part.Name = if #meshParts == 1 then spec.name else spec.name .. "_" .. index
+        part.Size = source.Size * scaleV
+        part.Anchored = true
+        part.CanCollide = false
+        part.CanTouch = false
+        part.CanQuery = false
+        part.Massless = true
+        part.CastShadow = true
+        part.Material = spec.material or PAINT
+        part.Color = spec.color or Color3.new(1, 1, 1)
+        -- MeshPart.Color does not tint a baked TextureID and scripts cannot write SurfaceAppearance maps, and the
+        -- generator's textures are pale mint. The palette tint travels as an attribute; the client's ArmorGrade
+        -- script multiplies it into the texture (EditableImage) so the armor matches the paint scheme.
+        part:SetAttribute("TintColor", spec.color or Color3.new(1, 1, 1))
+        part:SetAttribute("Joint", spec.joint)
+        part:SetAttribute("LocalCF", spec.cf * (CFrame.new(rel.Position * scaleV) * (rel - rel.Position)))
+        part:SetAttribute("Group", spec.group or "armor")
+        part:SetAttribute("AssetId", spec.asset)
+        part.Parent = self.model
+        self.counts[spec.group or "armor"] = (self.counts[spec.group or "armor"] or 0) + 1
+        self.meshParts += 1
+        table.insert(placed, part)
+    end
+    self.assemblies[spec.asset] = (self.assemblies[spec.asset] or 0) + 1
+    return placed
 end
 
 function PartKit:glow(name, joint, size, cf, color, group)

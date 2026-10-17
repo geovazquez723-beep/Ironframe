@@ -110,7 +110,29 @@ local function fallback(m)
     m:box("Placeholder", V(0.8, 0.8, 2.0), C(0, 0, -1.0), m.palette.dark, "weapon")
 end
 
+-- M05 visual meshes. The LOGICAL weapon ids (cost, stats, socket rules) are untouched: this table only chooses which
+-- generated asset draws a given id. `cf` places the mesh bounding-box centre in the weapon frame (breech at the
+-- origin, muzzle toward -Z); `yaw` turns a mesh that was generated facing the other way. Missing assets fall back to
+-- the procedural builders above, so the weapon never disappears.
+WeaponModules.Meshes = {
+    W_MACHINE_GUN = { asset = "WPN_010", cf = C(0, 0, -2.2), scale = 1.6, yaw = 0 },
+    W_LASER_RIFLE = { asset = "WPN_011", cf = C(0, 0, -2.9), scale = 1.7, yaw = 0 },
+    W_PLASMA_CANNON = { asset = "WPN_012", cf = C(0, 0, -3.0), scale = 1.2, yaw = 0 },
+    W_MISSILE_POD = { asset = "WPN_013", cf = C(0, 0, -1.9), scale = 1.0, yaw = 0 },
+}
+
 function WeaponModules.Build(kit, weaponId, socketName, joint, mountCF, palette)
+    local meshSpec = WeaponModules.Meshes[weaponId]
+    if meshSpec and kit.useAssets ~= false then
+        local placed = kit:mesh({
+            asset = meshSpec.asset, name = "Weapon_" .. socketName .. "_Body", joint = joint,
+            cf = mountCF * meshSpec.cf * CFrame.Angles(0, math.rad(meshSpec.yaw or 0), 0), scale = meshSpec.scale,
+            color = palette.tint, group = "weapon",
+        })
+        if placed then
+            return
+        end
+    end
     local builder = builders[weaponId] or fallback
     local module = { palette = palette }
     local function name(part)

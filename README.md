@@ -88,3 +88,10 @@ The authoritative compiler and preset selection run server-side. Real PvP will r
 - Camera: orbit camera now raycasts against CanQuery hangar structure and is capped under the roof trusses; keys 6-8
   give overview / east maintenance / crane views.
 - `tools/studio_cycle.ps1` rebuilds `build/Ironframe.rbxl` (git-ignored) and opens it in a new Studio instance.
+
+## Milestone 05 (Bastion visual overhaul)
+
+AI-generated armor, cockpit bezel, forearm and weapon meshes now sit on the unchanged procedural rig. Placement lives in
+`BastionBuilder.FIT` and `WeaponModules.Meshes`; assets are `assets/specs/batch_002.json`. A client script
+(`ArmorGrade`) tints the generated textures to the palette. See `docs/m05/M05_REPORT.md` for the asset log, measurements,
+screenshots and known limitations. `Factory.Create(..., { useAssets = false })` builds the all-procedural mech.

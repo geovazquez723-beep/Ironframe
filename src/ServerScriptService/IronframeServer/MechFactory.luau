@@ -13,7 +13,8 @@ local Factory = {}
 local BUILDERS = { IF42_BASTION = BastionBuilder }
 local VARIANTS = { BALANCED = "STANDARD", ENERGY = "ENERGY", MISSILE = "MISSILE" }
 
-function Factory.Create(ownerUserId, presetId, loadout, position)
+-- options.useAssets = false forces the all-procedural build (tests, and the documented fallback when assets are missing).
+function Factory.Create(ownerUserId, presetId, loadout, position, options)
     local builder = assert(BUILDERS[loadout.chassisId], "No visual builder for " .. tostring(loadout.chassisId))
     local model = Instance.new("Model")
     model.Name = tostring(ownerUserId)
@@ -33,7 +34,9 @@ function Factory.Create(ownerUserId, presetId, loadout, position)
         variant = VARIANTS[presetId] or "STANDARD",
         reinforced = loadout.systems and loadout.systems.armor == "ARMOR_REINFORCED",
         loadout = loadout,
+        useAssets = not (options and options.useAssets == false),
     })
+    model:SetAttribute("AiMeshParts", kit.meshParts)
     model.PrimaryPart = model:FindFirstChild("RigRoot")
 
     local rig = MechRig.Bind(model)
@@ -44,7 +47,7 @@ end
 
 -- Rig diagnostics for the UI and self tests.
 function Factory.Describe(model)
-    local info = { parts = 0, joints = 0, links = 0, socketsFilled = 0, socketsTotal = #RigSpec.SocketOrder, armorPanels = 0, imported = 0 }
+    local info = { parts = 0, joints = 0, links = 0, socketsFilled = 0, socketsTotal = #RigSpec.SocketOrder, armorPanels = 0, imported = 0, meshParts = 0 }
     if not model then
         return info
     end
@@ -58,6 +61,9 @@ function Factory.Describe(model)
             end
             if d:GetAttribute("LinkRole") == "Housing" then
                 info.links += 1
+            end
+            if d:IsA("MeshPart") then
+                info.meshParts += 1
             end
             if d:GetAttribute("Group") == "armor" then
                 info.armorPanels += 1

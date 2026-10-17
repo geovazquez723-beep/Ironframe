@@ -1,0 +1,211 @@
+{
+  "specVersion": 1,
+  "batch": "batch_002",
+  "style": "Grounded military-industrial battle mech hardware: olive-drab armor plates, dark gunmetal frame, graphite housings, steel actuators, bolted seams, small yellow marks. Machine part, not wearable. No text.",
+  "assets": [
+    {
+      "id": "MEC_010",
+      "category": "mech",
+      "name": "ChestArmorAssembly",
+      "prompt": "Heavy mech chest armor assembly: a broad faceted armored torso shell with a sloped front, shoulder-mount recesses on both sides, twin air intake grilles, layered bolted plates, flat rear bulkhead",
+      "size": {
+        "x": 8,
+        "y": 5.5,
+        "z": 5.5
+      },
+      "maxTriangles": 9000,
+      "segmentation": "explicit",
+      "intendedUse": "Replaces procedural chest plates/wings/intakes on the Torso joint",
+      "rig": "Torso frame; left-right symmetric; front toward -Z",
+      "partNames": [
+        "armor shell",
+        "intake grilles"
+      ]
+    },
+    {
+      "id": "MEC_011",
+      "category": "mech",
+      "name": "HeavyPauldron",
+      "prompt": "Heavy mech shoulder pauldron: a domed armored shell with stacked overlapping lames around the full rim, a bolted collar ring and a flat underside; mirror-symmetric on every axis, machine part",
+      "size": {
+        "x": 5.5,
+        "y": 3.0,
+        "z": 5.5
+      },
+      "maxTriangles": 6000,
+      "segmentation": "explicit",
+      "intendedUse": "Replaces procedural PauldronShell/Cap/Front/Rear/Lames; same mesh used both sides",
+      "rig": "Symmetric in X and Z so one mesh serves left and right",
+      "partNames": [
+        "pauldron shell",
+        "lames"
+      ]
+    },
+    {
+      "id": "MEC_012",
+      "category": "mech",
+      "name": "ArmoredShinAssembly",
+      "prompt": "Heavy mech lower-leg armor: a tapered armored shin guard with a raised central spine, stacked side plates, a rear calf housing with vents, bolted seams; left-right symmetric, hollow channel in the center for a leg frame",
+      "size": {
+        "x": 3.6,
+        "y": 4.5,
+        "z": 3.8
+      },
+      "maxTriangles": 8000,
+      "segmentation": "explicit",
+      "intendedUse": "Replaces procedural ShinFront/ShinSide/CalfPod on the Knee joint",
+      "rig": "Hangs along -Y from Knee; X-symmetric; shared by both legs",
+      "partNames": [
+        "shin guard",
+        "calf housing"
+      ]
+    },
+    {
+      "id": "MEC_013",
+      "category": "mech",
+      "name": "HeavyFootArmor",
+      "prompt": "Heavy mech foot armor: a wide flat armored foot with a sloped toe cap, split toe blocks, a heel block, side guards and a raised ankle collar mount; left-right symmetric, machine part",
+      "size": {
+        "x": 4.0,
+        "y": 2.2,
+        "z": 6.5
+      },
+      "maxTriangles": 7000,
+      "segmentation": "explicit",
+      "intendedUse": "Replaces procedural FootBase/FootArmor/ToePlate/HeelBlock on the Ankle joint",
+      "rig": "Ankle frame; X-symmetric; toe toward -Z",
+      "partNames": [
+        "foot shell",
+        "ankle collar"
+      ]
+    },
+    {
+      "id": "MEC_014",
+      "category": "mech",
+      "name": "CockpitHousing",
+      "prompt": "Recessed mech cockpit housing: a heavy armored brow hood over a deep recessed canopy opening with angled side pillars and a reinforced sill; left-right symmetric front-facing machine part",
+      "size": {
+        "x": 3.6,
+        "y": 2.6,
+        "z": 2.4
+      },
+      "maxTriangles": 5000,
+      "segmentation": "explicit",
+      "intendedUse": "Replaces procedural cockpit pillars, hood, sill, wings in the chest front",
+      "rig": "Torso frame; X-symmetric; opening faces -Z",
+      "partNames": [
+        "armor hood",
+        "pillars"
+      ]
+    },
+    {
+      "id": "MEC_015",
+      "category": "mech",
+      "name": "UpperLegArmor",
+      "prompt": "Heavy mech upper-leg armor: a thick armored thigh guard with a layered front plate, side plates, a top mounting collar and visible hydraulic recess at the rear; left-right symmetric machine part",
+      "size": {
+        "x": 3.4,
+        "y": 4.0,
+        "z": 3.4
+      },
+      "maxTriangles": 7000,
+      "segmentation": "explicit",
+      "intendedUse": "Replaces procedural ThighFront/ThighSide/ThighInner on the Thigh joint",
+      "rig": "Hangs along -Y from Thigh; X-symmetric; shared by both legs",
+      "partNames": [
+        "thigh guard",
+        "side plates"
+      ]
+    },
+    {
+      "id": "MEC_016",
+      "category": "mech",
+      "name": "UpperArmArmor",
+      "prompt": "Mecha upper-arm armor of a giant battle robot: one thick boxy angular arm casing, wider at the top, stepped layered plates, raised center keel, rows of bolts, a vent slot, open socket at the top for a shoulder joint. Heavy steel, olive-drab with dark gunmetal seams, yellow stencil marks. Single piece, not a pair, no text.",
+      "size": {
+        "x": 3.2,
+        "y": 3.4,
+        "z": 3.2
+      },
+      "maxTriangles": 6000,
+      "segmentation": "none",
+      "intendedUse": "Added in M05 after wave-1 review: upper-arm armor over the procedural UpperArmFrame (Shoulder joint)",
+      "rig": "Hangs along -Y from Shoulder; X-symmetric; shared by both arms"
+    },
+    {
+      "id": "MEC_017",
+      "category": "mech",
+      "name": "ForearmGauntlet",
+      "prompt": "Mecha forearm gauntlet of a giant battle robot: one chunky boxy armored forearm casing tapering to a heavy wrist cuff, layered side plates, vent slots, bolts, a hydraulic recess at the rear, open at the wrist end. Heavy steel, olive-drab with dark gunmetal seams, yellow stencil marks. Single piece, not a pair, no hand, no text.",
+      "size": {
+        "x": 3.2,
+        "y": 3.8,
+        "z": 3.4
+      },
+      "maxTriangles": 6000,
+      "segmentation": "none",
+      "intendedUse": "Added in M05 after wave-1 review: forearm armor over the procedural ForearmFrame/Gauntlet (Elbow joint)",
+      "rig": "Hangs along -Y from Elbow; X-symmetric; shared by both arms"
+    },
+    {
+      "id": "WPN_010",
+      "category": "weapon",
+      "name": "AutocannonVisual",
+      "prompt": "Mecha autocannon of a giant battle robot, barrel pointing forward along the long axis: heavy armored receiver block, long thick barrel with a perforated cooling shroud and muzzle brake, side feed housing with ammo belt, recoil spring rods. Gunmetal and olive-drab steel, yellow stencil marks. Weapon only, no arm, no hand, no text.",
+      "size": {
+        "x": 1.6,
+        "y": 1.8,
+        "z": 6.5
+      },
+      "maxTriangles": 7000,
+      "segmentation": "none",
+      "intendedUse": "Visual for logical weapon W_MACHINE_GUN (MG-9)",
+      "rig": "Barrel toward -Z, breech at origin after fit"
+    },
+    {
+      "id": "WPN_011",
+      "category": "weapon",
+      "name": "LaserRifleVisual",
+      "prompt": "Mecha laser rifle of a giant battle robot, emitter pointing forward along the long axis: slim armored body, long barrel with ring-shaped optical focusing lenses, finned heat sinks along the top, side power cells with energy conduit cables, glowing cyan emitter tip. Graphite and olive-drab steel. Weapon only, no arm, no hand, no text.",
+      "size": {
+        "x": 1.4,
+        "y": 1.6,
+        "z": 6.5
+      },
+      "maxTriangles": 7000,
+      "segmentation": "none",
+      "intendedUse": "Visual for logical weapon W_LASER_RIFLE (LR-12)",
+      "rig": "Emitter toward -Z"
+    },
+    {
+      "id": "WPN_012",
+      "category": "weapon",
+      "name": "PlasmaCannonVisual",
+      "prompt": "Mecha plasma cannon of a giant battle robot, muzzle pointing forward along the long axis: thick armored containment housing with a glowing cyan energy chamber window, finned cooling radiators on the sides, heavy flared muzzle, reinforced mounting lugs at the back. Gunmetal and olive-drab steel. Weapon only, no arm, no hand, no text.",
+      "size": {
+        "x": 2.4,
+        "y": 2.4,
+        "z": 6.5
+      },
+      "maxTriangles": 8000,
+      "segmentation": "none",
+      "intendedUse": "Visual for logical weapon W_PLASMA_CANNON (PC-40)",
+      "rig": "Muzzle toward -Z"
+    },
+    {
+      "id": "WPN_013",
+      "category": "weapon",
+      "name": "MissilePodVisual",
+      "prompt": "Mecha missile launcher pod of a giant battle robot, tubes pointing forward along the long axis: rectangular armored box with a 2 by 3 grid of round launch tubes in the front face, reinforced hinged tube doors, side support brackets and a rear vent. Olive-drab steel, dark gunmetal, yellow stencil marks. Weapon only, no arm, no text.",
+      "size": {
+        "x": 2.6,
+        "y": 2.2,
+        "z": 3.6
+      },
+      "maxTriangles": 8000,
+      "segmentation": "none",
+      "intendedUse": "Visual for logical weapon W_MISSILE_POD (MR-6)",
+      "rig": "Tubes toward -Z"
+    }
+  ]
+}

@@ -8,6 +8,17 @@ local Registry = {
     { id = "HNG_005", name = "CableReel", batch = "batch_001", modelAssetId = 104826683943789, bbox = Vector3.new(2.71, 2.84, 3.00), meshParts = 2 },
     { id = "HNG_006", name = "ToolCabinet", batch = "batch_001", modelAssetId = 131010300372520, bbox = Vector3.new(4.16, 2.93, 2.50), meshParts = 3 },
     { id = "HNG_007", name = "OverheadFloodlight", batch = "batch_001", modelAssetId = 107457433144343, bbox = Vector3.new(2.70, 3.56, 3.00), meshParts = 3 },
+    { id = "MEC_010", name = "ChestArmorAssembly", batch = "batch_002", modelAssetId = 90166220783727, bbox = Vector3.new(5.58, 5.50, 2.46), meshParts = 1 },
+    { id = "MEC_011", name = "HeavyPauldron", batch = "batch_002", modelAssetId = 99055148995092, bbox = Vector3.new(4.36, 3.00, 3.18), meshParts = 1 },
+    { id = "MEC_012", name = "ArmoredShinAssembly", batch = "batch_002", modelAssetId = 102256774562982, bbox = Vector3.new(2.29, 4.00, 1.60), meshParts = 1 },
+    { id = "MEC_013", name = "HeavyFootArmor", batch = "batch_002", modelAssetId = 115078020229237, bbox = Vector3.new(2.00, 2.00, 3.94), meshParts = 1 },
+    { id = "MEC_014", name = "CockpitHousing", batch = "batch_002", modelAssetId = 132078369309729, bbox = Vector3.new(2.21, 2.20, 1.40), meshParts = 1 },
+    { id = "MEC_015", name = "UpperLegArmor", batch = "batch_002", modelAssetId = 78068239506823, bbox = Vector3.new(2.07, 3.55, 1.80), meshParts = 1 },
+    { id = "MEC_017", name = "ForearmGauntlet", batch = "batch_002", modelAssetId = 100468702861194, bbox = Vector3.new(1.69, 3.80, 1.79), meshParts = 1 },
+    { id = "WPN_010", name = "AutocannonVisual", batch = "batch_002", modelAssetId = 135000770234049, bbox = Vector3.new(0.93, 1.80, 2.04), meshParts = 1 },
+    { id = "WPN_011", name = "LaserRifleVisual", batch = "batch_002", modelAssetId = 127888942808191, bbox = Vector3.new(0.67, 1.60, 3.43), meshParts = 1 },
+    { id = "WPN_012", name = "PlasmaCannonVisual", batch = "batch_002", modelAssetId = 107552381016016, bbox = Vector3.new(2.40, 2.24, 4.14), meshParts = 1 },
+    { id = "WPN_013", name = "MissilePodVisual", batch = "batch_002", modelAssetId = 75236428365936, bbox = Vector3.new(1.99, 2.20, 1.48), meshParts = 1 },
 }
 
 local byId = {}

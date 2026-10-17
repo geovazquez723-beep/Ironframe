@@ -44,6 +44,47 @@ local function cursorDelta()
     return delta
 end
 
+-- Mech clearance (M05): the AI armor and weapons are larger and more irregular than the old blockout, and the
+-- camera can orbit at MIN_ZOOM through the pauldrons. Every visible mech part is tracked and the camera is pushed
+-- straight back along its own ray until it is CAMERA_PAD studs clear of all of them. Pure client-side framing.
+local CAMERA_PAD = 1.0
+local mechParts = {}
+local function trackMechs(folder)
+    local function add(descendant)
+        if descendant:IsA("BasePart") and descendant.Transparency < 1 then
+            mechParts[descendant] = true
+        end
+    end
+    for _, descendant in ipairs(folder:GetDescendants()) do
+        add(descendant)
+    end
+    folder.DescendantAdded:Connect(add)
+    folder.DescendantRemoving:Connect(function(descendant)
+        mechParts[descendant] = nil
+    end)
+end
+task.spawn(function()
+    trackMechs(workspace:WaitForChild("IronframeMechs"))
+end)
+
+-- Distance from `point` to the nearest mech part surface (0 when inside); stops early once under the pad.
+local function mechClearance(point: Vector3): number
+    local best = math.huge
+    for part in pairs(mechParts) do
+        local l = part.CFrame:PointToObjectSpace(point)
+        local h = part.Size / 2
+        local dx, dy, dz = math.max(math.abs(l.X) - h.X, 0), math.max(math.abs(l.Y) - h.Y, 0), math.max(math.abs(l.Z) - h.Z, 0)
+        local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if d < best then
+            best = d
+            if best < CAMERA_PAD then
+                return best
+            end
+        end
+    end
+    return best
+end
+
 function GarageCamera.Reset()
     target = table.clone(DEFAULT)
     -- Take the short way round so reset never spins the view.
@@ -165,6 +206,20 @@ function GarageCamera.Start(getFocus)
         if hit then
             local allowed = math.max((hit.Position - look).Magnitude - 1.2, MIN_ZOOM * 0.6)
             position = look + toCamera.Unit * allowed
+        end
+
+        -- Keep the lens outside the mech's own geometry (only matters when zoomed in close).
+        local arm = position - look
+        local distance = arm.Magnitude
+        if distance < 26 and mechClearance(position) < CAMERA_PAD then
+            local direction = arm.Unit
+            for _ = 1, 60 do
+                distance += 0.5
+                position = look + direction * distance
+                if mechClearance(position) >= CAMERA_PAD then
+                    break
+                end
+            end
         end
 
         camera.CameraType = Enum.CameraType.Scriptable

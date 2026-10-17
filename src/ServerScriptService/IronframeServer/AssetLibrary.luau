@@ -93,6 +93,11 @@ function AssetLibrary.Load()
     return loaded, failed
 end
 
+-- The cached, anchored template model for `id` (nil if it failed to load). Callers must Clone it.
+function AssetLibrary.Template(id)
+    return cache:FindFirstChild(id)
+end
+
 function AssetLibrary.Has(id)
     return cache:FindFirstChild(id) ~= nil
 end

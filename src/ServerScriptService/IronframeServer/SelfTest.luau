@@ -110,7 +110,7 @@ test("rig: every preset binds all joints, 6 sockets, hydraulics", function()
         assert(d.socketsFilled == 6, id .. " sockets=" .. d.socketsFilled)
         assert(d.joints == #RigSpec.Joints, id .. " joints=" .. d.joints)
         assert(d.links == #RigSpec.Links, id .. " links=" .. d.links)
-        assert(d.armorPanels >= 40, id .. " armor panels=" .. d.armorPanels)
+        assert(d.armorPanels >= 24, id .. " armor panels=" .. d.armorPanels)
         assert(model.PrimaryPart ~= nil)
         assert(model:GetAttribute("PilotTargetable") == false)
         assert(not model:FindFirstChildWhichIsA("Humanoid", true), "mech must not contain a pilot humanoid")
@@ -144,8 +144,93 @@ test("rig: weapons stay attached while torso turns", function()
         assert(d < 1e-3, part.Name .. " detached by " .. d)
         if (part.Position - movedBefore[part]).Magnitude > 0.5 then moved += 1 end
     end
-    assert(count > 30, "too few weapon parts: " .. count)
+    assert(count >= 6, "too few weapon parts: " .. count) -- AI weapon meshes consolidate a weapon into one part
     assert(moved > 0, "torso turn did not move weapons")
+    model:Destroy()
+end)
+
+-- Oriented-box penetration depth (SAT) between two parts; 0 when separated.
+local function penetration(a: BasePart, b: BasePart): number
+    local ca, cb = a.CFrame, b.CFrame
+    local ha, hb = a.Size / 2, b.Size / 2
+    local ra, rb = { ca.RightVector, ca.UpVector, ca.LookVector }, { cb.RightVector, cb.UpVector, cb.LookVector }
+    local axes = {}
+    for _, v in ipairs(ra) do table.insert(axes, v) end
+    for _, v in ipairs(rb) do table.insert(axes, v) end
+    for _, u in ipairs(ra) do
+        for _, v in ipairs(rb) do
+            local c = u:Cross(v)
+            if c.Magnitude > 1e-4 then table.insert(axes, c.Unit) end
+        end
+    end
+    local function radius(cf, h, axis)
+        return math.abs(cf.RightVector:Dot(axis)) * h.X + math.abs(cf.UpVector:Dot(axis)) * h.Y + math.abs(cf.LookVector:Dot(axis)) * h.Z
+    end
+    local d, minOverlap = cb.Position - ca.Position, math.huge
+    for _, axis in ipairs(axes) do
+        local overlap = radius(ca, ha, axis) + radius(cb, hb, axis) - math.abs(d:Dot(axis))
+        if overlap <= 0 then return 0 end
+        minOverlap = math.min(minOverlap, overlap)
+    end
+    return minOverlap
+end
+
+test("m05: AI armor keeps the rig contract and falls back cleanly", function()
+    for _, id in ipairs(Loadouts.order) do
+        local procedural = Factory.Create(1, id, Loadouts.presets[id], Vector3.zero, { useAssets = false })
+        local dp = Factory.Describe(procedural)
+        assert(dp.meshParts == 0, "procedural fallback must not contain MeshParts")
+        procedural:Destroy()
+        local withAssets = Factory.Create(1, id, Loadouts.presets[id], Vector3.zero)
+        local da = Factory.Describe(withAssets)
+        assert(da.joints == dp.joints and da.links == dp.links and da.socketsFilled == dp.socketsFilled, id .. ": AI armor changed the rig contract")
+        if AssetLibrary.Has("MEC_010") and AssetLibrary.Has("MEC_011") then
+            assert(da.meshParts >= 12, id .. ": expected AI armor meshes, found " .. da.meshParts)
+            assert(da.parts < dp.parts, id .. ": AI armor should consolidate procedural parts")
+        end
+        withAssets:Destroy()
+    end
+end)
+
+test("m05: left and right armor reuse one mesh asset; weapon visuals keep logical ids", function()
+    local model = Factory.Create(1, "BALANCED", Loadouts.presets.BALANCED, Vector3.zero)
+    for _, base in ipairs({ "ThighArmor", "ShinArmor", "FootArmor", "Pauldron", "UpperArmArmor", "ForearmArmor" }) do
+        local l, r = model:FindFirstChild(base .. "L"), model:FindFirstChild(base .. "R")
+        if l and r then
+            assert(l:GetAttribute("AssetId") == r:GetAttribute("AssetId") and l.MeshId == r.MeshId, base .. " L/R do not share one mesh")
+            assert(l.Size == r.Size, base .. " L/R sizes differ")
+        end
+    end
+    -- Metrics come from the compiler only: swapping weapon visuals must not change cost or stats.
+    local metrics = Compiler.Compile(Loadouts.presets.BALANCED).metrics
+    assert(metrics.mass > 0 and metrics.equippedWeapons == 6)
+    model:Destroy()
+end)
+
+test("m05: AI armor clears neighbouring armor through the idle sweep", function()
+    local model = Factory.Create(1, "BALANCED", Loadouts.presets.BALANCED, Vector3.zero)
+    if not model:FindFirstChild("Pauldron" .. "L") then
+        model:Destroy()
+        return -- assets unavailable: procedural fallback has its own spacing rules
+    end
+    local rig = MechRig.Bind(model)
+    local checks = {
+        { "PauldronL", "HeadBlock", 0.25 }, { "PauldronR", "HeadBlock", 0.25 },
+        { "PauldronL", "UpperArmArmorL", 0.25 }, { "PauldronR", "UpperArmArmorR", 0.25 },
+        { "PauldronL", "ChestArmor", 0.25 }, { "PauldronR", "ChestArmor", 0.25 },
+        { "ChestArmor", "UpperArmArmorL", 0.25 }, { "ChestArmor", "UpperArmArmorR", 0.25 },
+        { "ThighArmorL", "ThighArmorR", 0.25 }, { "ThighArmorL", "ShinArmorL", 0.6 },
+    }
+    for t = 0, 60, 0.5 do
+        MechRig.Apply(rig, CFrame.new(), (Showroom.Pose(t, 0)))
+        for _, c in ipairs(checks) do
+            local a, b = model:FindFirstChild(c[1]), model:FindFirstChild(c[2])
+            if a and b then
+                local depth = penetration(a, b)
+                assert(depth <= c[3], string.format("%s / %s interpenetrate %.2f studs at t=%.1f (limit %.2f)", c[1], c[2], depth, t, c[3]))
+            end
+        end
+    end
     model:Destroy()
 end)
 
@@ -189,8 +274,11 @@ test("ejection: stale session never rebuilds but pilot stays safe", function()
     assert(not rebuilt and session.pilotSafe)
 end)
 
-test("asset registry: stable ids, cloud model ids, six accepted assets", function()
-    assert(#AssetRegistry.list == 6, "expected 6 accepted assets, got " .. #AssetRegistry.list)
+test("asset registry: stable ids, cloud model ids, accepted assets only", function()
+    assert(#AssetRegistry.list >= 11, "expected at least 11 accepted assets, got " .. #AssetRegistry.list)
+    for _, id in ipairs({ "MEC_010", "MEC_011", "MEC_012", "MEC_013", "MEC_015" }) do
+        assert(AssetRegistry.byId[id], "first-wave armor asset missing from registry: " .. id)
+    end
     for _, entry in ipairs(AssetRegistry.list) do
         assert(string.match(entry.id, "^%u%u%u_%d%d%d$"), "bad id " .. entry.id)
         assert(type(entry.modelAssetId) == "number" and entry.modelAssetId > 0, entry.id .. " lacks a model asset id")

@@ -9,8 +9,12 @@ if (Test-Path build\studio.pid) {
 New-Item -ItemType Directory -Force build | Out-Null
 $rojo = "C:\tools\rojo\rojo.exe"
 & $rojo build default.project.json -o build\Ironframe.rbxl
-$exe = (Get-Process RobloxStudioBeta | Select-Object -First 1).Path
-$known = (Get-Process RobloxStudioBeta).Id
+# Resolve the Studio executable robustly: another running instance, or the newest installed version.
+$exe = (Get-Process RobloxStudioBeta -ErrorAction SilentlyContinue | Where-Object { $_.Path } | Select-Object -First 1).Path
+if (-not $exe) {
+    $exe = (Get-ChildItem "$env:LOCALAPPDATA\Roblox\Versions" -Recurse -Filter RobloxStudioBeta.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+}
+$known = @((Get-Process RobloxStudioBeta -ErrorAction SilentlyContinue).Id)
 Start-Process $exe -ArgumentList "`"$root\build\Ironframe.rbxl`""
 Start-Sleep 20
 $new = (Get-Process RobloxStudioBeta | Where-Object { $known -notcontains $_.Id }).Id

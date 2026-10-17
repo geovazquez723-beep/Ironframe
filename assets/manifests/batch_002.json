@@ -1,0 +1,789 @@
+{
+  "batch": "batch_002",
+  "specVersion": 1,
+  "assets": {
+    "MEC_010": {
+      "status": "ACCEPTED",
+      "retryCount": 2,
+      "attempts": [
+        {
+          "status": "REJECTED",
+          "generationId": "6d2cdc72-bd46-4f28-a1d4-afd18ffc704f",
+          "publishedAssetId": "72245426966584",
+          "boundingBox": [
+            6.78,
+            5.5,
+            5.341
+          ],
+          "meshPartCount": 2,
+          "triangles": 8834,
+          "parts": [
+            {
+              "name": "armor shell_geom",
+              "size": [
+                6.78,
+                5.5,
+                5.342
+              ],
+              "meshId": "rbxassetid://126062462870542",
+              "textureId": "rbxassetid://105471918279878",
+              "triangles": 8798
+            },
+            {
+              "name": "intake grilles_geom",
+              "size": [
+                0.375,
+                0.207,
+                0.366
+              ],
+              "meshId": "rbxassetid://90581935080096",
+              "textureId": "rbxassetid://77931110036167",
+              "triangles": 36
+            }
+          ],
+          "promptVariant": "v1 'chest armor assembly', explicit 2 parts",
+          "evaluation": "Reads as a wearable vest with shoulder caps (the known wearable-armor failure); second explicit part is a 0.4-stud fragment.",
+          "recordedAt": "2026-10-17T01:19:33+00:00"
+        },
+        {
+          "status": "REJECTED",
+          "generationId": "93beeaf9-bb60-4899-89c3-44222ed98099",
+          "publishedAssetId": "79056652051538",
+          "boundingBox": [
+            3.851,
+            3.014,
+            5.5
+          ],
+          "meshPartCount": 1,
+          "triangles": 8448,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                3.851,
+                3.014,
+                5.5
+              ],
+              "meshId": "rbxassetid://127913948473231",
+              "textureId": "rbxassetid://83781759359012",
+              "triangles": 8448
+            }
+          ],
+          "promptVariant": "v2 'combat-vehicle hull block for a walking tank', none",
+          "evaluation": "Generator produced a literal tracked tank; unusable.",
+          "recordedAt": "2026-10-17T01:19:33+00:00"
+        },
+        {
+          "status": "ACCEPTED",
+          "generationId": "84b4715b-33c1-4a30-b1b1-6f6465150d5f",
+          "publishedAssetId": "90166220783727",
+          "boundingBox": [
+            5.582,
+            5.5,
+            2.457
+          ],
+          "meshPartCount": 1,
+          "triangles": 7700,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                5.582,
+                5.5,
+                2.457
+              ],
+              "meshId": "rbxassetid://110784935757568",
+              "textureId": "rbxassetid://108815130901462",
+              "triangles": 7700
+            }
+          ],
+          "promptVariant": "v3 'mecha chest block of a giant battle robot', none",
+          "evaluation": "Angular mecha chest shell with amber vent windows, broad flared shoulder-top plates and a keel. Shallow (2.5 deep): used as the front armor shell over the procedural chest frame.",
+          "recordedAt": "2026-10-17T01:19:33+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 90166220783727,
+        "verifiedBy": "InsertService:LoadAsset in the Ironframe.rbxl place (not the staging place); all MeshIds present",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "MEC_011": {
+      "status": "ACCEPTED",
+      "retryCount": 2,
+      "attempts": [
+        {
+          "status": "REJECTED",
+          "generationId": "dd789875-761a-48a1-9f75-f107e2a00ea1",
+          "publishedAssetId": "128544589104098",
+          "boundingBox": [
+            2.58,
+            3.0,
+            2.41
+          ],
+          "meshPartCount": 2,
+          "triangles": 5928,
+          "parts": [
+            {
+              "name": "pauldron shell_geom",
+              "size": [
+                2.58,
+                3.0,
+                2.41
+              ],
+              "meshId": "rbxassetid://88014658664805",
+              "textureId": "rbxassetid://78261140155326",
+              "triangles": 5910
+            },
+            {
+              "name": "lames_geom",
+              "size": [
+                0.081,
+                0.083,
+                0.066
+              ],
+              "meshId": "rbxassetid://74496089387750",
+              "textureId": "rbxassetid://135676625337930",
+              "triangles": 18
+            }
+          ],
+          "promptVariant": "v1 'domed shell with lames', explicit",
+          "evaluation": "Barrel/grenade shape, undersized, degenerate second part.",
+          "recordedAt": "2026-10-17T01:19:33+00:00"
+        },
+        {
+          "status": "REJECTED",
+          "generationId": "a4dc7465-fd46-455f-a20f-a6c2c1a0103e",
+          "publishedAssetId": "79136691002714",
+          "boundingBox": [
+            2.667,
+            3.0,
+            1.628
+          ],
+          "meshPartCount": 1,
+          "triangles": 4054,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                2.667,
+                3.0,
+                1.628
+              ],
+              "meshId": "rbxassetid://121609396132460",
+              "textureId": "rbxassetid://109607504781718",
+              "triangles": 4054
+            }
+          ],
+          "promptVariant": "v2 'angular armor shield block for a walking tank shoulder', none",
+          "evaluation": "Plain smooth shield, no mechanical detail, thin.",
+          "recordedAt": "2026-10-17T01:19:33+00:00"
+        },
+        {
+          "status": "ACCEPTED",
+          "generationId": "19bd6871-5f2a-472f-b8af-6391c4e27fef",
+          "publishedAssetId": "99055148995092",
+          "boundingBox": [
+            4.364,
+            3.0,
+            3.176
+          ],
+          "meshPartCount": 1,
+          "triangles": 5959,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                4.364,
+                3.0,
+                3.176
+              ],
+              "meshId": "rbxassetid://100019703856295",
+              "textureId": "rbxassetid://107739462157781",
+              "triangles": 5959
+            }
+          ],
+          "promptVariant": "v3 'mecha shoulder armor ... boxy angular pauldron', none",
+          "evaluation": "Layered pauldron with yellow stencil bands, side rails and bolt clusters; near X-symmetric so one mesh serves both sides.",
+          "recordedAt": "2026-10-17T01:19:33+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 99055148995092,
+        "verifiedBy": "InsertService:LoadAsset in the Ironframe.rbxl place (not the staging place); all MeshIds present",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "MEC_012": {
+      "status": "ACCEPTED",
+      "retryCount": 3,
+      "attempts": [
+        {
+          "status": "REJECTED",
+          "generationId": "639498f6-e328-4ecd-afff-507c3ade1725",
+          "publishedAssetId": "117305791168885",
+          "boundingBox": [
+            3.6,
+            4.133,
+            1.896
+          ],
+          "meshPartCount": 2,
+          "triangles": 7864,
+          "parts": [
+            {
+              "name": "shin guard_geom",
+              "size": [
+                3.291,
+                4.133,
+                1.896
+              ],
+              "meshId": "rbxassetid://128378082349799",
+              "textureId": "rbxassetid://128700846175216",
+              "triangles": 7800
+            },
+            {
+              "name": "calf housing_geom",
+              "size": [
+                0.087,
+                0.174,
+                0.358
+              ],
+              "meshId": "rbxassetid://92392014053631",
+              "textureId": "rbxassetid://118354885136532",
+              "triangles": 64
+            }
+          ],
+          "promptVariant": "v1 'lower-leg armor', explicit",
+          "evaluation": "Produced a pair of legs/trousers; not a single shin.",
+          "recordedAt": "2026-10-17T01:19:33+00:00"
+        },
+        {
+          "status": "FAILED",
+          "generationId": null,
+          "publishedAssetId": null,
+          "boundingBox": null,
+          "meshPartCount": 0,
+          "triangles": null,
+          "parts": [],
+          "promptVariant": "v2 'single armored leg casing for a walking tank'",
+          "evaluation": "Studio reported: Failed to fetch image for model generation (transient).",
+          "error": "Failed to fetch image for model generation",
+          "recordedAt": "2026-10-17T01:19:33+00:00"
+        },
+        {
+          "status": "REJECTED",
+          "generationId": "85083bb9-c9d6-4377-ab16-8383f697c660",
+          "publishedAssetId": "91251224356493",
+          "boundingBox": [
+            3.2,
+            2.984,
+            1.877
+          ],
+          "meshPartCount": 1,
+          "triangles": 7886,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                3.2,
+                2.984,
+                1.877
+              ],
+              "meshId": "rbxassetid://79362132215867",
+              "textureId": "rbxassetid://104665243409227",
+              "triangles": 7886
+            }
+          ],
+          "promptVariant": "v3 'mecha leg armor casing, one piece', none",
+          "evaluation": "Produced a miniature robot torso with arms, not a shin.",
+          "recordedAt": "2026-10-17T01:19:33+00:00"
+        },
+        {
+          "status": "ACCEPTED",
+          "generationId": "3f611c8b-6dc1-4a9b-84ed-479e7a203bde",
+          "publishedAssetId": "102256774562982",
+          "boundingBox": [
+            2.288,
+            3.998,
+            1.6
+          ],
+          "meshPartCount": 1,
+          "triangles": 4842,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                2.288,
+                3.998,
+                1.6
+              ],
+              "meshId": "rbxassetid://121031808969189",
+              "textureId": "rbxassetid://87046921017269",
+              "triangles": 4842
+            }
+          ],
+          "promptVariant": "v4 'mecha shin armor plate ... front greave shield', none",
+          "evaluation": "Single tapered greave plate with spine and lip. Smooth but clean; pairs with the procedural ShinFrame/CalfPod.",
+          "recordedAt": "2026-10-17T01:19:34+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 102256774562982,
+        "verifiedBy": "InsertService:LoadAsset in the Ironframe.rbxl place (not the staging place); all MeshIds present",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "MEC_013": {
+      "status": "ACCEPTED",
+      "retryCount": 1,
+      "attempts": [
+        {
+          "status": "REJECTED",
+          "generationId": "0329a82e-3d55-464a-85b3-1fdaaa5ed99c",
+          "publishedAssetId": "79137463896936",
+          "boundingBox": [
+            1.079,
+            2.2,
+            2.1
+          ],
+          "meshPartCount": 2,
+          "triangles": 6858,
+          "parts": [
+            {
+              "name": "foot shell_geom",
+              "size": [
+                1.079,
+                2.2,
+                2.1
+              ],
+              "meshId": "rbxassetid://109143219245621",
+              "textureId": "rbxassetid://86199549469592",
+              "triangles": 6276
+            },
+            {
+              "name": "ankle collar_geom",
+              "size": [
+                0.852,
+                0.311,
+                0.371
+              ],
+              "meshId": "rbxassetid://113709052252326",
+              "textureId": "rbxassetid://120215645900405",
+              "triangles": 582
+            }
+          ],
+          "promptVariant": "v1 'foot armor', explicit",
+          "evaluation": "A human-style boot at 1 stud wide; unusable.",
+          "recordedAt": "2026-10-17T01:19:34+00:00"
+        },
+        {
+          "status": "ACCEPTED",
+          "generationId": "d47c781b-5c05-48b4-adfb-04858c48c6d0",
+          "publishedAssetId": "115078020229237",
+          "boundingBox": [
+            2.005,
+            2.0,
+            3.94
+          ],
+          "meshPartCount": 1,
+          "triangles": 5018,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                2.005,
+                2.0,
+                3.94
+              ],
+              "meshId": "rbxassetid://121358370930125",
+              "textureId": "rbxassetid://119355289184467",
+              "triangles": 5018
+            }
+          ],
+          "promptVariant": "v2 'foot pad for a walking tank', none",
+          "evaluation": "Wedge foot with ankle socket ring, toe and heel guards; reads as a machine foot, not a boot. Will be scaled uniformly.",
+          "recordedAt": "2026-10-17T01:19:34+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 115078020229237,
+        "verifiedBy": "InsertService:LoadAsset in the Ironframe.rbxl place (not the staging place); all MeshIds present",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "MEC_014": {
+      "status": "ACCEPTED",
+      "retryCount": 1,
+      "attempts": [
+        {
+          "status": "REJECTED",
+          "generationId": "79869517-e1f5-49d1-af76-28cebe49ccc8",
+          "publishedAssetId": "108054717661344",
+          "boundingBox": [
+            2.606,
+            2.468,
+            2.4
+          ],
+          "meshPartCount": 1,
+          "triangles": 4504,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                2.606,
+                2.468,
+                2.4
+              ],
+              "meshId": "rbxassetid://86962750973123",
+              "textureId": "rbxassetid://94053250840515",
+              "triangles": 4504
+            }
+          ],
+          "promptVariant": "v1 'mecha cockpit hood', none",
+          "evaluation": "Came out as a mecha head/helmet with a visor, not a cockpit housing.",
+          "recordedAt": "2026-10-17T01:19:34+00:00"
+        },
+        {
+          "status": "ACCEPTED",
+          "generationId": "052be56e-bf3e-4e78-b4b0-a2838cb85f23",
+          "publishedAssetId": "132078369309729",
+          "boundingBox": [
+            2.205,
+            2.2,
+            1.402
+          ],
+          "meshPartCount": 1,
+          "triangles": 3862,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                2.205,
+                2.2,
+                1.402
+              ],
+              "meshId": "rbxassetid://126058201438423",
+              "textureId": "rbxassetid://73905931617259",
+              "triangles": 3862
+            }
+          ],
+          "promptVariant": "v2 'armored viewport frame for a mecha chest', none",
+          "evaluation": "Symmetric beveled window bezel with brow block and sill; hollow opening for a glass pane. Works as a cockpit surround.",
+          "recordedAt": "2026-10-17T01:25:51+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 132078369309729,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 17/17",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "MEC_015": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "23788685-402f-4476-8ed7-d56f721d2033",
+          "publishedAssetId": "78068239506823",
+          "boundingBox": [
+            2.067,
+            3.553,
+            1.8
+          ],
+          "meshPartCount": 1,
+          "triangles": 5368,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                2.067,
+                3.553,
+                1.8
+              ],
+              "meshId": "rbxassetid://82559873474887",
+              "textureId": "rbxassetid://117890116412055",
+              "triangles": 5368
+            }
+          ],
+          "promptVariant": "v1 'mecha thigh armor plate', none",
+          "evaluation": "Heavy thigh shell with layered side pod and top vents.",
+          "recordedAt": "2026-10-17T01:19:34+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 78068239506823,
+        "verifiedBy": "InsertService:LoadAsset in the Ironframe.rbxl place (not the staging place); all MeshIds present",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "MEC_016": {
+      "status": "REJECTED",
+      "retryCount": 1,
+      "attempts": [
+        {
+          "status": "REJECTED",
+          "generationId": "9d8e454b-1799-44f2-bf51-1dcb9a1c73f0",
+          "publishedAssetId": "134877630931279",
+          "boundingBox": [
+            2.355,
+            3.4,
+            1.966
+          ],
+          "meshPartCount": 1,
+          "triangles": 5756,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                2.355,
+                3.4,
+                1.966
+              ],
+              "meshId": "rbxassetid://140174616110470",
+              "textureId": "rbxassetid://100194076772440",
+              "triangles": 5756
+            }
+          ],
+          "promptVariant": "v1 'mecha upper-arm armor casing', none",
+          "evaluation": "Generated a human-style torso vest with a neck hole; not an arm.",
+          "recordedAt": "2026-10-17T01:33:22+00:00"
+        },
+        {
+          "status": "REJECTED",
+          "generationId": "608a7a22-7f85-4289-88da-d8c9fa31acbb",
+          "publishedAssetId": "118146015614996",
+          "boundingBox": [
+            1.085,
+            1.081,
+            3.0
+          ],
+          "meshPartCount": 1,
+          "triangles": 3796,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                1.085,
+                1.081,
+                3.0
+              ],
+              "meshId": "rbxassetid://138357831137801",
+              "textureId": "rbxassetid://115751012665687",
+              "triangles": 3796
+            }
+          ],
+          "promptVariant": "v2 'mecha arm segment, octagonal tube sleeve', none",
+          "evaluation": "A 1.1-stud-wide tube lying along Z; far too thin for the 2-stud arm frame. Budget spent; the upper arm reuses MEC_015.",
+          "recordedAt": "2026-10-17T01:33:22+00:00"
+        }
+      ]
+    },
+    "MEC_017": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "cff00df1-af56-4a7b-b081-1ab7c0d79472",
+          "publishedAssetId": "100468702861194",
+          "boundingBox": [
+            1.693,
+            3.8,
+            1.795
+          ],
+          "meshPartCount": 1,
+          "triangles": 5584,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                1.693,
+                3.8,
+                1.795
+              ],
+              "meshId": "rbxassetid://132890788763855",
+              "textureId": "rbxassetid://112696406654292",
+              "triangles": 5584
+            }
+          ],
+          "promptVariant": "v1 'mecha forearm gauntlet', none",
+          "evaluation": "Forearm casing with visible spring piston, side shield plate and a block fist at the bottom; thin (1.7 wide), so it is scaled 1.3x in X. The fist sits inside the weapon sleeve.",
+          "recordedAt": "2026-10-17T01:33:22+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 100468702861194,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 17/17",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "WPN_010": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "b0566055-7916-4786-a9ff-167606017edb",
+          "publishedAssetId": "135000770234049",
+          "boundingBox": [
+            0.934,
+            1.8,
+            2.035
+          ],
+          "meshPartCount": 1,
+          "triangles": 6690,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                0.934,
+                1.8,
+                2.035
+              ],
+              "meshId": "rbxassetid://109772887065211",
+              "textureId": "rbxassetid://133527392638673",
+              "triangles": 6690
+            }
+          ],
+          "promptVariant": "v1 'mecha autocannon'",
+          "evaluation": "Barrel with perforated shroud, receiver, ammo belt drum and a turret-style pedestal; mesh came out 2 studs long and is scaled up.",
+          "recordedAt": "2026-10-17T01:33:22+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 135000770234049,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 17/17",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "WPN_011": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "d356ecc5-5acc-4703-9587-6b60b40c9b6e",
+          "publishedAssetId": "127888942808191",
+          "boundingBox": [
+            0.669,
+            1.6,
+            3.427
+          ],
+          "meshPartCount": 1,
+          "triangles": 6210,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                0.669,
+                1.6,
+                3.427
+              ],
+              "meshId": "rbxassetid://96392572459424",
+              "textureId": "rbxassetid://72857362516336",
+              "triangles": 6210
+            }
+          ],
+          "promptVariant": "v1 'mecha laser rifle'",
+          "evaluation": "Rifle with ring lenses, heat-sink fins, power cells, blue emitter and a pistol grip underneath.",
+          "recordedAt": "2026-10-17T01:33:22+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 127888942808191,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 17/17",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "WPN_012": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "96b4ae70-3543-472a-a277-c05d768df6a8",
+          "publishedAssetId": "107552381016016",
+          "boundingBox": [
+            2.4,
+            2.236,
+            4.139
+          ],
+          "meshPartCount": 1,
+          "triangles": 7102,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                2.4,
+                2.236,
+                4.139
+              ],
+              "meshId": "rbxassetid://81041503629663",
+              "textureId": "rbxassetid://110067930651555",
+              "triangles": 7102
+            }
+          ],
+          "promptVariant": "v1 'mecha plasma cannon'",
+          "evaluation": "Containment housing, radiator barrel, flared muzzle with visible cyan chamber, and support legs at the base.",
+          "recordedAt": "2026-10-17T01:33:22+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 107552381016016,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 17/17",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "WPN_013": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "6b658f02-91bd-4369-b668-055945daf7fa",
+          "publishedAssetId": "75236428365936",
+          "boundingBox": [
+            1.988,
+            2.2,
+            1.483
+          ],
+          "meshPartCount": 1,
+          "triangles": 6816,
+          "parts": [
+            {
+              "name": "body_geom",
+              "size": [
+                1.988,
+                2.2,
+                1.483
+              ],
+              "meshId": "rbxassetid://135711252277823",
+              "textureId": "rbxassetid://82226125932330",
+              "triangles": 6816
+            }
+          ],
+          "promptVariant": "v1 'mecha missile launcher pod'",
+          "evaluation": "Rectangular armored pod with a 2x3 tube face and rear exhaust ports. Reads clearly as a launcher.",
+          "recordedAt": "2026-10-17T01:33:22+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 75236428365936,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 17/17",
+        "placeFile": "NOT_REQUIRED"
+      }
+    }
+  }
+}

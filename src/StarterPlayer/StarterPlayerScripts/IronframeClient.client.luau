@@ -86,9 +86,9 @@ local function display(data)
     local dg = data.diagnostics
     if dg then
         local t, r = dg.tests, dg.rig
-        diag.Text = string.format("DIAGNOSTICS\nSELF-TEST  %d / %d %s\nRIG  %d parts  %d joints  %d hydraulics\nSOCKETS  %d / %d    ARMOR PANELS  %d\nPILOT  %s",
+        diag.Text = string.format("DIAGNOSTICS\nSELF-TEST  %d / %d %s\nRIG  %d parts (%d AI meshes)  %d joints  %d hydraulics\nSOCKETS  %d / %d    ARMOR PANELS  %d\nPILOT  %s",
             t.passed, t.total, (#t.failed == 0) and "PASS" or ("FAIL: " .. table.concat(t.failed, ", ")),
-            r.parts, r.joints, r.links, r.socketsFilled, r.socketsTotal, r.armorPanels,
+            r.parts, r.meshParts or 0, r.joints, r.links, r.socketsFilled, r.socketsTotal, r.armorPanels,
             data.pilotSafe and "SAFE / UNTARGETABLE" or "SAFE")
     end
     print(string.format("[IF-CLIENT] preset=%s mass=%.1f power=%.1f", data.presetId, m.mass, m.powerDraw))
