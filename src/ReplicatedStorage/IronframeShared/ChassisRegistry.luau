@@ -6,6 +6,12 @@ local ChassisRegistry = {
         massLimit = 42,
         dryMass = 19.5,
         baseIntegrity = 1000,
+        -- Integrated default generator/capacitor mass is included in dryMass; upgrade mass is additional.
+        defaultSystems = { capacitor = "CAP_STANDARD", shield = "SHIELD_PULSE" },
+        energy = {
+            idle = 8, drive = 20, speed = 14, acceleration = 2.4, turn = 10, braking = 0.35,
+            sprintDemand = 100, sprintMultiplier = 1.6, sprintAcceleration = 1.35, coolingScale = 0.6,
+        },
         hardpoints = {
             left_arm       = { size = 3, families = { "energy", "ballistic", "missile" } },
             right_arm      = { size = 3, families = { "energy", "ballistic", "missile" } },

@@ -1,5 +1,13 @@
 -- All numbers are prototype balance parameters, not final game tuning.
 local ComponentRegistry = {
+    CAP_STANDARD = { name = "Integrated C-160", class = "capacitor", mass = 0, capacity = 160, initialCharge = 160,
+        chargeEfficiency = 0.9, maxChargeRate = 50, maxDischargeRate = 100, burstLimit = 60 },
+    CAP_HIGH_DENSITY = { name = "C-240 Reserve", class = "capacitor", mass = 1.0, capacity = 240, initialCharge = 240,
+        chargeEfficiency = 0.94, maxChargeRate = 55, maxDischargeRate = 120, burstLimit = 80 },
+    SHIELD_PULSE = { name = "P-01 Pulse Guard", class = "shield", mass = 0, quality = 1, integrity = 180,
+        activationCost = 25, chargeTime = 0.15, perfectTime = 0.25, activeTime = 0.5, recoveryTime = 0.25,
+        cooldown = 4, activeDrain = 50, arcCos = math.cos(math.rad(65)), perfectMultiplier = 1.45, impactEnergy = 0.18,
+        mitigation = { ballistic = 0.65, laser = 0.8, plasma = 0.5, missile = 0.4 } },
     CORE_220 = { name = "Core 220", class = "reactor", mass = 4.0, powerOutput = 80 },
     CORE_300 = { name = "Core 300", class = "reactor", mass = 5.0, powerOutput = 120 },
     RAD_STANDARD = { name = "Standard Radiator", class = "cooling", mass = 1.5, coolingPerSecond = 18 },

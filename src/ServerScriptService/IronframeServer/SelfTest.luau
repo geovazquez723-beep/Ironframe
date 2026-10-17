@@ -343,6 +343,26 @@ test("m06a: cockpit AI assets are replicated read-only when registered", functio
     end
 end)
 
+test("m08a: installed energy components compile without changing existing presets", function()
+    for _, id in ipairs(Loadouts.order) do
+        local compiled = Compiler.Compile(Loadouts.presets[id])
+        assert(compiled.valid and compiled.energy.output == 80 and compiled.energy.capacity == 160)
+        assert(compiled.energy.shield.activationCost == 25)
+    end
+    local upgrade = preset("BALANCED")
+    upgrade.systems.capacitor, upgrade.systems.reactor = "CAP_HIGH_DENSITY", "CORE_300"
+    local compiled = Compiler.Compile(upgrade)
+    assert(compiled.valid and compiled.energy.capacity == 240 and compiled.energy.output == 120)
+end)
+test("m08a: invalid resource components are rejected", function()
+    local invalid = preset("BALANCED")
+    invalid.systems.shield = "CORE_220"
+    assert(not Compiler.Compile(invalid).valid)
+    invalid = preset("BALANCED")
+    invalid.systems.capacitor = "CAP_MISSING"
+    assert(not Compiler.Compile(invalid).valid)
+end)
+
 function SelfTest.Run()
     local result = { passed = 0, total = #tests, failed = {} }
     for _, t in ipairs(tests) do

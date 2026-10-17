@@ -202,30 +202,36 @@ local function buildReactor(display: Display)
         widgets[key .. "Value"] = label(c, "---", UDim2.fromOffset(190, y), UDim2.fromOffset(270, 24), { TextSize = 20, TextColor3 = WHITE, TextXAlignment = Enum.TextXAlignment.Right })
         widgets[key .. "Bar"] = bar(c, UDim2.fromOffset(20, y + 30), UDim2.fromOffset(440, 16), 0, color)
     end
-    gauge("power", 56, "POWER DRAW / OUTPUT", CYAN)
-    gauge("heatGen", 128, "HEAT GENERATION /s", AMBER)
-    gauge("cooling", 200, "COOLING CAPACITY /s", CYAN)
-    label(c, "HEAT STORAGE", UDim2.fromOffset(20, 272), UDim2.fromOffset(250, 24), { TextSize = 20, TextColor3 = DIM_TEXT })
+    gauge("power", 56, "DEMAND / REACTOR u/s", CYAN)
+    gauge("heatGen", 128, "CAPACITOR UNITS", CYAN)
+    gauge("cooling", 200, "THERMAL LOAD %", AMBER)
+    label(c, "SUPPLY / CAP FLOW", UDim2.fromOffset(20, 272), UDim2.fromOffset(250, 24), { TextSize = 20, TextColor3 = DIM_TEXT })
     widgets.heatStore = label(c, "STANDBY", UDim2.fromOffset(190, 272), UDim2.fromOffset(270, 24), { TextSize = 20, TextColor3 = DIM_TEXT, TextXAlignment = Enum.TextXAlignment.Right })
-    label(c, "CORE IDLE (DEMO)", UDim2.fromOffset(20, 330), UDim2.fromOffset(250, 24), { TextSize = 20, TextColor3 = DIM_TEXT })
-    widgets.coreIdle = label(c, "0000 RPM", UDim2.fromOffset(190, 330), UDim2.fromOffset(270, 24), { TextSize = 20, TextColor3 = AMBER, TextXAlignment = Enum.TextXAlignment.Right })
-    widgets.coreBar = bar(c, UDim2.fromOffset(20, 360), UDim2.fromOffset(440, 16), 0.5, AMBER)
+    widgets.energyDrive = label(c, "PROPULSION  ---", UDim2.fromOffset(20, 320), UDim2.fromOffset(440, 25), { TextSize = 20, TextColor3 = CYAN })
+    widgets.energyShield = label(c, "SHIELD  ---", UDim2.fromOffset(20, 352), UDim2.fromOffset(440, 25), { TextSize = 20, TextColor3 = CYAN })
+    widgets.energyWarning = label(c, "", UDim2.fromOffset(20, 390), UDim2.fromOffset(440, 48), { TextSize = 18, TextColor3 = AMBER, TextWrapped = true })
     display.refresh = function()
         local m = Telemetry.Value("loadout.metrics", nil)
         local systems = Telemetry.Value("loadout.systems", {})
         if m then
             local reactor = Components[systems.reactor or ""]
             widgets.reactorName.Text = "CORE  " .. string.upper(reactor and reactor.name or "UNKNOWN")
-            widgets.powerValue.Text = string.format("%.0f / %.0f", m.powerDraw, m.powerOutput)
-            setBar(widgets.powerBar, m.powerDraw / math.max(m.powerOutput, 1), if m.powerDraw / math.max(m.powerOutput, 1) > 0.9 then AMBER else CYAN)
-            widgets.heatGenValue.Text = string.format("%.1f", m.heatPerSecond)
-            setBar(widgets.heatGenBar, m.heatPerSecond / math.max(m.heatPerSecond, m.coolingPerSecond, 1), AMBER)
-            widgets.coolingValue.Text = string.format("%.1f  (NET %+.1f)", m.coolingPerSecond, m.heatPerSecond - m.coolingPerSecond)
-            setBar(widgets.coolingBar, m.coolingPerSecond / math.max(m.heatPerSecond, m.coolingPerSecond, 1), CYAN)
+            local demand, output = Telemetry.Value("energy.demand",0), Telemetry.Value("energy.output",0)
+            local charge, capacity = Telemetry.Value("energy.charge",0), Telemetry.Value("energy.capacity",160)
+            local thermal, deficit = Telemetry.Value("energy.thermal",0), Telemetry.Value("energy.deficit",0)
+            widgets.powerValue.Text = string.format("%.1f / %.1f", demand, output)
+            setBar(widgets.powerBar, demand / math.max(output,1), if demand > output then AMBER else CYAN)
+            widgets.heatGenValue.Text = string.format("%.1f / %.0f", charge, capacity)
+            setBar(widgets.heatGenBar, charge / math.max(capacity,1), if charge < 25 then AMBER else CYAN)
+            widgets.coolingValue.Text = string.format("%.1f%%", thermal)
+            setBar(widgets.coolingBar, thermal/100, AMBER)
+            widgets.energyDrive.Text = string.format("PROPULSION %.1f u/s  | SIM %.1f",Telemetry.Value("energy.propulsion",0),Telemetry.Value("energy.weaponDemand",0))
+            widgets.energyShield.Text = string.format("SHIELD %s  %.1fs",Telemetry.Value("shield.state","READY"),Telemetry.Value("shield.cooldown",0))
+            widgets.energyWarning.Text = if deficit > 0.1 then string.format("DEFICIT %.1f u/s / SPRINT LIMITED",deficit) elseif charge < 25 then "SHIELD UNAVAILABLE: CAPACITOR LOW" else Telemetry.Value("shield.reason","READY")
         end
-        local heatChannel = Telemetry.Get("heat.level")
-        widgets.heatStore.Text = if heatChannel.value ~= nil then string.format("%.0f%%", heatChannel.value) else "STANDBY"
-        statusTag(display, if m then "LIVE" else "STANDBY")
+        local capChannel = Telemetry.Get("energy.capRate")
+        widgets.heatStore.Text = if capChannel.value ~= nil then string.format("%.1f / %+.1f",Telemetry.Value("energy.supply",0), capChannel.value) else "STANDBY"
+        statusTag(display, Telemetry.Get("energy.charge").status)
     end
 end
 
@@ -350,7 +356,7 @@ local function buildOverhead(display: Display)
             item.dot.BackgroundColor3 = if on then CYAN else AMBER
             item.dot.BackgroundTransparency = if on then 0.1 else 0.55
         end
-        widgets.overheadStatus.Text = Hud.StatusLine or "IF-42 BASTION"
+        widgets.overheadStatus.Text = string.format("SHIELD %s / %.1fs / %s",Telemetry.Value("shield.state","READY"),Telemetry.Value("shield.cooldown",0),Telemetry.Value("shield.timing","AWAITING IMPACT"))
         statusTag(display, "LIVE")
     end
 end
@@ -618,12 +624,6 @@ function Hud.Step(dt: number, t: number)
                 widgets.radarCenter.Y - math.cos(angle) * widgets.radarRadius
             )
         end
-    end
-    local reactor = displays.MFD_C
-    if reactor and reactor.state == "ON" then
-        local rpm = 2200 + 40 * math.sin(t * 0.8) + 15 * math.sin(t * 2.3)
-        widgets.coreIdle.Text = string.format("%04d RPM", rpm)
-        setBar(widgets.coreBar, rpm / 4000)
     end
     refreshAccumulator += dt
     if refreshAccumulator >= 0.16 then

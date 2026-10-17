@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("IronframeShared")
 local Drive = require(Shared:WaitForChild("MechDrive"))
 local ChassisRegistry = require(Shared:WaitForChild("ChassisRegistry"))
+local EnergySystems = require(script.Parent.EnergySystems)
 
 local Locomotion = {}
 
@@ -21,7 +22,7 @@ export type Controller = {
     model: Model,
     params: { [string]: any },
     state: any,
-    input: { throttle: number, steer: number, locked: boolean },
+    input: { throttle: number, steer: number, locked: boolean, sprint: boolean? },
     lastInput: number,
     hull: Part,
     params2: any,
@@ -30,6 +31,7 @@ export type Controller = {
     published: { speed: number, yawRate: number, state: string },
     stats: { stepMs: number, steps: number },
     lastCF: CFrame,
+    energySystems: any?,
 }
 
 local rayParams = RaycastParams.new()
@@ -194,9 +196,10 @@ function Locomotion.Destroy(c: Controller)
 end
 
 -- Untrusted client input. Always sanitised; the timestamp feeds the dead-man timeout.
-function Locomotion.SetInput(c: Controller, throttle: any, steer: any)
+function Locomotion.SetInput(c: Controller, throttle: any, steer: any, sprint: any)
     local t, s = Drive.SanitizeInput(throttle, steer)
     c.input.throttle, c.input.steer = t, s
+    c.input.sprint = sprint == true
     c.lastInput = os.clock()
 end
 
@@ -247,7 +250,25 @@ function Locomotion.Step(c: Controller, dt: number): ({ [string]: any }, boolean
     elseif os.clock() - c.lastInput > Locomotion.INPUT_TIMEOUT then
         throttle, steer = 0, 0
     end
-    local events = Drive.Advance(s, { throttle = throttle, steer = steer, locked = input.locked and not c.autopilot }, dt, c.params, c.params2)
+    local events = {}
+    local elapsed = math.clamp(dt, 0, 0.25)
+    local steps = math.max(1, math.ceil(elapsed * 60))
+    local h = elapsed / steps
+    for _ = 1, steps do
+        local base, boost = 1, 0
+        if c.energySystems then
+            local live = not input.locked or c.autopilot ~= nil
+            local sprint = input.sprint == true and not c.autopilot and os.clock() - c.lastInput <= Locomotion.INPUT_TIMEOUT
+            base, boost = EnergySystems.Step(c.energySystems, h, s, if live then throttle else 0, if live then steer else 0, sprint, live)
+        end
+        local balance = c.energySystems and c.energySystems.config.movement
+        local e = Drive.Advance(s, { throttle = throttle, steer = steer, locked = input.locked and not c.autopilot,
+            baseScale = base, speedScale = base * (1 + boost * (balance and balance.sprintMultiplier - 1 or 0)),
+            accelScale = base * (1 + boost * (balance and balance.sprintAcceleration - 1 or 0)),
+        }, h, c.params, c.params2)
+        if e.bump then events.bump = math.max(events.bump or 0, e.bump) end
+        if e.turnBlocked then events.turnBlocked = true end
+    end
 
     -- Void watchdog: a pose far below the world means something went badly wrong; the caller recovers it.
     if s.y < -60 then

@@ -74,6 +74,8 @@ function ProvingGround.Build(bay: Model, origin: Vector3)
     g.Name = "ProvingGround"
     g.Parent = bay
     local HW, Z0, Z1 = ProvingGround.FIELD_HALF_WIDTH, ProvingGround.FIELD_START, ProvingGround.FIELD_END
+    part(g, "EnergyTestConsole", V3(4,4,2), at(54,2,108), COLOR.gunmetal, METAL)
+    sign(g, "EnergyTestInstructions", "PULSE DEFENSE TEST RANGE\nH: SCHEDULE IMPACT / J: CATEGORY\nG: PULSE GUARD / K: WEAPON LOAD SIM\nDIAGNOSTIC DAMAGE ONLY", V3(13,6,0.2), at(54,7,108), Enum.NormalId.Front, COLOR.black, COLOR.cool, 22)
     local length = Z1 - Z0
 
     -- Ground, apron and road ---------------------------------------------------------------------------------------------

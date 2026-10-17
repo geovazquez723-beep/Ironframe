@@ -75,14 +75,14 @@ local function stepOnce(s: State, input: { throttle: number?, steer: number?, lo
     s.throttle, s.steer = throttle, steer
 
     -- Linear speed ----------------------------------------------------------------------------------------------------
-    local target = if throttle > 0 then P.maxForward * throttle elseif throttle < 0 then P.maxReverse * throttle else 0
+    local target = if throttle > 0 then P.maxForward * throttle * (input.speedScale or 1) elseif throttle < 0 then P.maxReverse * throttle * (input.baseScale or 1) else 0
     local err = target - s.speed
     local slowing = math.abs(target) < math.abs(s.speed) or (target ~= 0 and s.speed ~= 0 and (target > 0) ~= (s.speed > 0))
     local limit
     if slowing then
         limit = if throttle == 0 and not input.locked then P.coastDecel else P.brakeDecel -- locked (ejection, startup) stops hard
     else
-        limit = if target >= 0 then P.accelForward else P.accelReverse
+        limit = if target >= 0 then P.accelForward * (input.accelScale or 1) else P.accelReverse * (input.baseScale or 1)
     end
     local desired = clamp(err * P.responsiveness, -limit, limit)
     -- Past a reversal the brake limit applies until the sign flips, then acceleration limits take over.

@@ -62,6 +62,9 @@ Telemetry.Keys = {
     "loadout.metrics", "loadout.mounts", "loadout.systems", "integrity.total", "diag.tests", "diag.rig", "weapons.selected",
     -- reserved for future systems; nothing publishes these yet, so the displays show STANDBY
     "heat.level", "integrity.sections", "weapons.ammo", "movement.speed", "targeting.lock", "sensors.contacts",
+    "energy.charge", "energy.capacity", "energy.output", "energy.demand", "energy.supply", "energy.capRate",
+    "energy.thermal", "energy.propulsion", "energy.deficit", "energy.weaponDemand",
+    "shield.state", "shield.cooldown", "shield.integrity", "shield.reason", "shield.timing",
 }
 
 return Telemetry

@@ -76,6 +76,8 @@ end
 -- Advances the gait by dt. v = signed forward speed, w = yaw rate (+ left). Returns a pose description and the events list.
 function Gait.Update(g: any, dt: number, v: number, w: number, P: any): (any, { { leg: string, strength: number } })
     local events = {}
+    local pace = math.max(1, math.abs(v) / P.refSpeed)
+    local swingMin, swingMax = P.swingMin / pace, P.swingMax / pace
     local speedFrac = clamp(math.abs(v) / P.refSpeed, 0, 1)
     local turnFrac = clamp(math.abs(w) / P.refTurn, 0, 1)
     local want = math.max(speedFrac, turnFrac * 0.5)
@@ -138,12 +140,12 @@ function Gait.Update(g: any, dt: number, v: number, w: number, P: any): (any, { 
                 if atLimit or stepOff then
                     go = true
                     target = dir * half * P.landFrac
-                    T = clamp(P.swingScale * (2 * half) / math.max(math.abs(s), 1.0), P.swingMin, P.swingMax)
+                    T = clamp(P.swingScale * (2 * half) / math.max(math.abs(s), 1.0), swingMin, swingMax)
                     -- Never keep the other foot waiting past its own lift point: it can only travel so far meanwhile.
                     local so = rates[other.side]
                     if math.abs(so) > P.moveEps then
                         local remaining = if so > 0 then (other.f + half) else (half - other.f)
-                        T = math.max(P.swingMin, math.min(T, remaining / math.abs(so) * 0.95))
+                        T = math.max(swingMin, math.min(T, remaining / math.abs(so) * 0.95))
                     end
                     height = P.liftMax * (0.5 + 0.5 * speedFrac)
                 end

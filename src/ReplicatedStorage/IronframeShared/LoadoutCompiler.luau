@@ -1,5 +1,6 @@
 local ChassisRegistry = require(script.Parent.ChassisRegistry)
 local ComponentRegistry = require(script.Parent.ComponentRegistry)
+local EnergyConfig = require(script.Parent.EnergyConfig)
 
 local Compiler = {}
 
@@ -55,8 +56,20 @@ function Compiler.Compile(loadout)
         end
     end
     for slot in pairs(systems) do
-        if slot ~= "reactor" and slot ~= "cooling" and slot ~= "armor" then
+        if slot ~= "reactor" and slot ~= "cooling" and slot ~= "armor" and slot ~= "capacitor" and slot ~= "shield" then
             table.insert(issues, "Unknown system slot: " .. tostring(slot))
+        end
+    end
+
+    local resourceComponents = {}
+    for _, slot in ipairs({ "capacitor", "shield" }) do
+        local id = systems[slot] or chassis.defaultSystems[slot]
+        local component = ComponentRegistry[id]
+        if not component or component.class ~= slot then
+            table.insert(issues, "Invalid component for system slot: " .. slot)
+        else
+            resourceComponents[slot] = component
+            metrics.mass += component.mass
         end
     end
 
@@ -100,7 +113,11 @@ function Compiler.Compile(loadout)
     -- Excess weapon heat is deliberately a tactical tradeoff, not a build error.
     -- The future combat simulation must model throttling/overheat honestly.
     metrics.netHeatPerSecond = metrics.heatPerSecond - metrics.coolingPerSecond
-    return { valid = #issues == 0, issues = issues, metrics = metrics }
+    local energy
+    if #issues == 0 then
+        energy = EnergyConfig.Build(chassis, ComponentRegistry[systems.reactor], resourceComponents.capacitor, ComponentRegistry[systems.cooling], resourceComponents.shield)
+    end
+    return { valid = #issues == 0, issues = issues, metrics = metrics, energy = energy }
 end
 
 return Compiler

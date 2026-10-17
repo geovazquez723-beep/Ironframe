@@ -12,6 +12,7 @@ local Locomotion = require(script.Parent.Locomotion)
 local Deployment = require(script.Parent.Deployment)
 local BayControl = require(script.Parent.BayControl)
 local RunService = game:GetService("RunService")
+local EnergySystems = require(script.Parent.EnergySystems)
 
 local sessions = {}
 local selfTestResult = { passed = 0, total = 0, failed = {} }
@@ -33,6 +34,8 @@ local StateChanged = remote("RemoteEvent", "StateChanged")
 local RequestDeploy = remote("RemoteEvent", "RequestDeploy")
 local RequestReturn = remote("RemoteEvent", "RequestReturn")
 local DriveInput = remote("RemoteEvent", "DriveInput") -- (throttle, steer), sanitised and clamped server-side
+local RequestShield = remote("RemoteEvent", "RequestShield")
+local RequestEnergyTest = remote("RemoteEvent", "RequestEnergyTest")
 
 local function validatePresets()
     local count = 0
@@ -115,6 +118,8 @@ local function assemble(player)
     session.mech = model
     session.loadout = Loadouts.presets[session.presetId]
     session.machineState = "OPERATIONAL"
+    session.power = EnergySystems.Create(model, Compiler.Compile(session.loadout).energy)
+    EnergySystems.Publish(session.power, true)
     setDeploymentAttributes(session)
     StateChanged:FireClient(player, publicState(player, "Loadout installed"))
     print(string.format("[IF-STEP-03] Assembled %s for userId %d", session.presetId, player.UserId))
@@ -156,6 +161,7 @@ RequestTestEject.OnServerEvent:Connect(function(player)
     Ejection.Run(session, {
         onPilotSafe = function()
             session.mech:SetAttribute("State", "PILOT_EVACUATED")
+            if session.power then pcall(EnergySystems.Cancel, session.power) end
             -- Where the mech is right now (the capsule rises from here, deployed or not). Read before anything can fail.
             local origin = session.bayPosition
             if session.controller then
@@ -253,6 +259,7 @@ RequestDeploy.OnServerEvent:Connect(function(player)
     end
     Deployment.Transition(session, "DEPLOYING")
     session.controller = Locomotion.Create(session.mech, session.mech:GetAttribute("ChassisId"), session.bayPosition, 0)
+    session.controller.energySystems = session.power
     session.deployAt = os.clock() + math.max(Deployment.STARTUP_TIME, BayControl.DOOR_TIME)
     BayControl.SetDoors(session.bay, true)
     setDeploymentAttributes(session)
@@ -265,6 +272,7 @@ RequestReturn.OnServerEvent:Connect(function(player)
     if not session or session.deployment ~= "ACTIVE" or not session.controller then return end
     local c = session.controller
     Deployment.Transition(session, "DOCKING")
+    EnergySystems.Cancel(session.power)
     c.input.throttle, c.input.steer = 0, 0
     local inside = math.abs(c.state.z - session.bayPosition.Z) < 55 and math.abs(c.state.x - session.bayPosition.X) < 60
     if inside then
@@ -281,14 +289,29 @@ RequestReturn.OnServerEvent:Connect(function(player)
     setDeploymentAttributes(session)
 end)
 
-DriveInput.OnServerEvent:Connect(function(player, throttle, steer)
+DriveInput.OnServerEvent:Connect(function(player, throttle, steer, sprint)
     local session = sessions[player]
     if not session or not session.controller then return end
     local now = os.clock()
     if now - session.lastDriveInput < 0.02 then return end -- rate limit (clients send ~10-20 Hz)
     session.lastDriveInput = now
     if not Deployment.AcceptsInput(session.deployment) then return end
-    Locomotion.SetInput(session.controller, throttle, steer)
+    Locomotion.SetInput(session.controller, throttle, steer, sprint)
+end)
+
+RequestShield.OnServerEvent:Connect(function(player)
+    local session = sessions[player]
+    if not session or not session.power or session.machineState ~= "OPERATIONAL" then return end
+    if os.clock() - (session.lastShield or -100) < 0.15 then return end
+    session.lastShield = os.clock()
+    EnergySystems.Activate(session.power, session.deployment == "ACTIVE")
+end)
+RequestEnergyTest.OnServerEvent:Connect(function(player, patternId)
+    local session = sessions[player]
+    if not session or session.deployment ~= "ACTIVE" or session.machineState ~= "OPERATIONAL" or not session.controller then return end
+    if os.clock() - (session.lastEnergyTestRequest or -100) < 0.1 then return end
+    session.lastEnergyTestRequest = os.clock()
+    EnergySystems.RequestTest(session.power, patternId, session.controller.state.yaw, Locomotion.Position(session.controller))
 end)
 
 -- One loop drives every deployed mech. dt is clamped inside MechDrive, so a hitch cannot launch anything.
@@ -298,6 +321,9 @@ RunService.Heartbeat:Connect(function(dt)
     local active = 0
     for player, session in pairs(sessions) do
         local c = session.controller
+        if session.power and (not c or session.machineState ~= "OPERATIONAL" or (session.deployment == "DOCKING" and session.recallAt)) then
+            EnergySystems.Step(session.power, math.min(dt, 0.25), nil, 0, 0, false, false)
+        end
         if c and session.machineState == "OPERATIONAL" then
             active += 1
             local state = session.deployment
