@@ -1,33 +1,66 @@
-# LR-12 original audio — import required
+# Ironframe original weapon audio
 
-`lr12_discharge.wav` is original mathematical synthesis for Ironframe: 0.32 seconds, mono, 44.1 kHz, 16-bit PCM; peak -3.01 dBFS. It contains a short filtered-noise/electronic attack, an FM-modulated falling discharge, restrained low-frequency resonance and a controlled decay. No external recording or third-party sample was used. Source: `tools/synthesize_weapon_audio.py`, fixed seed 1209. License: CC0-1.0 (dedicated to the public domain to the extent permitted by law).
+All weapon sounds below are original deterministic mathematical synthesis (Python standard library only, no recorded
+or third-party samples), mono 44.1 kHz 16-bit PCM, CC0-1.0.
 
-**No Roblox asset ID exists yet.** `manifest.json` records `asset_id: null`. The available Studio tools can search/insert existing audio but cannot upload a local WAV. User inventory search found no existing laser audio. Community search results were inspected but not selected as substitutes for the original sound. The LR-12 audio path intentionally remains silent until import; it does not use the former UI slider beep or an invented ID. Laser visuals and gameplay still function.
+| Weapon | WAV | Generator | Manifest | Roblox asset | Status |
+| --- | --- | --- | --- | --- | --- |
+| LR-12 laser | `lr12_discharge.wav` (0.32 s) | `tools/synthesize_weapon_audio.py` | `manifest.json` | `123083870222487` | registered, Approved/Active (uploaded manually by the project owner) |
+| HMG-20 Mauler | `mauler_discharge.wav` (0.62 s) | `tools/synthesize_mauler_audio.py` | `mauler_discharge.json` | `75916048000769` | uploaded by `tools/roblox_audio_upload.py`, Approved/Active |
 
-## Import and register
+MG-9 discharge, receiver and casing detail still use the bundled client files `rbxasset://sounds/impact_explosion_03.mp3`
+and `rbxasset://sounds/action_footsteps_plastic.mp3` (cropped/pitched); they have no uploaded asset. The Mauler's
+receiver slam and casing bounce details use the same bundled mechanism sample at lower pitch.
 
-1. Open the intended Ironframe experience in Studio using the creator account/group that owns it. The local M08C test place reports itself as unpublished, so it does not establish a destination experience's audio permissions.
-2. Open **Asset Manager**, choose **Import**, and select `C:\repo\ironframe\assets\audio\lr12_discharge.wav`. Confirm the import and wait for completion/moderation. Alternatively, upload the same file through the Creator Dashboard's audio asset upload flow.
-3. Copy the numeric ID Roblox actually returns for this audio. In the Creator Dashboard choose **Development Items > Audio**, select the uploaded asset, then **Permissions > Experiences > Add experiences**. Enter the intended Ironframe universe ID, click **Add**, then **Done** if a grant is needed. Use its **universe/experience ID**, not its start-place ID. Keep the asset private unless you intentionally want public distribution.
-4. Edit `src/ReplicatedStorage/IronframeShared/WeaponPresentation.luau`: set `audio.laserAssetId` to `rbxassetid://` followed by the real returned ID. Update `assets/audio/manifest.json` with that numeric `asset_id` and the verified destination universe ID. Do not alter the weapon component's costs or timing.
-5. Rebuild with Rojo and restart Studio Play so both the client configuration and its module cache refresh.
-6. Run `tools/verify_weapon_audio_studio.luau` on **Client** in the intended experience. It checks loading, duration and decoded playback, then cleans up the temporary verification Sound. Inspect Output for access/moderation failures. Success in an unpublished owner Studio session alone is not proof of permission for another experience or player.
-7. Fire repeated LR-12 pulses in cockpit and exterior views. Listen at normal device volume for the electronic attack, falling body and brief resonance. Confirm the tail ends within about 0.32 seconds, pitch variation is modest, cockpit highs are softened, and repeated shots do not stack excessively. Also test from a second player account/session with access to the actual experience.
-8. Record the asset ID, destination permission check and listening result in `docs/M08C_WEAPON_POLISH.md`. Until this is done, the audible laser success criterion remains unverified.
+## Automated upload pipeline (Open Cloud)
 
-## Existing MG audio
-
-The prototype MG discharge still uses the already-established Roblox client sample `rbxasset://sounds/impact_explosion_03.mp3`, cropped to 0.13 seconds of playback and pitched slightly higher. Receiver and casing transients use the existing `rbxasset://sounds/action_footsteps_plastic.mp3`, cropped to 0.055/0.09 seconds and brightened by pitch. These are bundled Roblox files, not newly uploaded numeric assets; no new asset ID is claimed for them. Their mechanical/metallic character still needs a human listening review.
-
-The fixed pool has eight discharge and four detail voices. Distance attenuation uses 12..220 studs. Cockpit mix reads the existing `CockpitAudio` state: volume 62% of exterior, high band -14 dB, mid band -2 dB, low band retained. The generated laser plays as one clip with all four layers pre-mixed, varying speed by at most 2.5% per shot. No per-shot audio graph or unbounded Sound allocation is created.
-
-## Reproduce / validate
+`tools/roblox_audio_upload.py` (stdlib only) reads the key from the `ROBLOX_OPEN_CLOUD_API_KEY` environment variable
+(process env, or the Windows User/Machine variable) and never prints or stores it. Needed key scopes: `asset:read`,
+`asset:write`. Uploads need a creator: `IRONFRAME_CREATOR=user:<id>` (or `group:<id>`) or `--creator`.
 
 ```
-python tools/synthesize_weapon_audio.py
-python tools/synthesize_weapon_audio.py --check
+python tools/roblox_audio_upload.py upload   --wav assets/audio/X.wav --manifest assets/audio/X.json --name ironframe_x
+python tools/roblox_audio_upload.py register --manifest assets/audio/manifest.json --asset-id <id>   # adopt an existing upload
+python tools/roblox_audio_upload.py validate --manifest assets/audio/X.json     # asset type Audio + Active + moderation Approved
+python tools/roblox_audio_upload.py grant    --manifest assets/audio/X.json --universe-id <id>   # optional experience grant
 ```
 
-Regeneration is deterministic and resets the generated manifest's upload status; preserve a registered manifest before deliberately regenerating after upload. `--check` only validates the WAV and does not rewrite it or its registration metadata. Objective signal/format validation is not a listening-quality verdict.
+* `upload` skips the network when the manifest already holds an `asset_id` for the same SHA-256 (`--force` overrides),
+  submits the multipart request, polls the long-running operation, then polls validation (moderation can lag a minute
+  or more). Exit status is non-zero until the asset is `Approved` and `Active`; rerun `validate` later and it records the
+  result in the manifest (`status`, `validated_at`).
+* Then set the returned id in `src/ReplicatedStorage/IronframeShared/WeaponPresentation.luau` (`audio.*AssetId`, as
+  `rbxassetid://<id>`) and run `tools/verify_weapon_audio_studio.luau` on **Client** during Play to confirm the sound
+  loads, has the expected duration and decodes a signal.
+* The two generators are deterministic. Regenerating keeps a recorded `asset_id` when the new WAV has the same SHA-256;
+  a changed WAV resets the registration so the new file must be uploaded again.
+* `grant` uses the asset-permissions API (needs that scope; not exercised). Assets stay private to the creator account
+  by default and play in that account's own experiences. The local test place is unpublished (universe id 0), so no
+  experience grant has been made or tested; add the real universe id before shipping to another experience or group.
 
-Official references: [Roblox audio assets and import requirements](https://create.roblox.com/docs/audio/assets), [asset privacy and permissions](https://create.roblox.com/docs/projects/assets/privacy), [Sound playback regions](https://create.roblox.com/docs/reference/engine/classes/Sound#PlaybackRegion).
+Official references: [Roblox audio assets](https://create.roblox.com/docs/audio/assets),
+[asset permissions](https://create.roblox.com/docs/projects/assets/privacy),
+[Assets Open Cloud API](https://create.roblox.com/docs/cloud/reference/features/assets).
+
+## HMG-20 generation and candidate selection
+
+`python tools/synthesize_mauler_audio.py` renders three candidates (A, B, C: body/crack balance and seed), measures
+each, scores it against a heavy-cannon target profile and writes the winner plus the full candidate report into
+`mauler_discharge.json`. Layers: 2 ms filtered-noise crack (2.8 kHz + 1.4 kHz bands), falling-sine receiver slam
+(240 -> 66 Hz), low pressure body sweep (98 -> 44 Hz, 38 Hz high-pass so no sub-bass flood), four inharmonic steel ring
+partials (412/709/1163/1688 Hz), a mid blast tail, a quiet bolt-return tick at 0.19 s, tanh soft saturation (never
+hard clipping), 7.8 kHz low-pass and a 60 ms release. `--check` validates the committed file only.
+
+Objective measurements are not a listening verdict (no audio loopback exists in this environment). Candidate scores
+(lower is better): A 2.58, B 3.74, **C 1.67 (selected)**. C: peak -3.00 dBFS, RMS -17.18 dBFS (LR-12 is -18.44), crest
+14.2 dB, zero clipped samples, DC ~0, sub-40 Hz energy 0.01 percent, 87 percent of raw power in 40-200 Hz with an
+A-weighted centroid near 1.37 kHz and 10.6 percent A-weighted energy above 2 kHz, -30 dB envelope decay 0.29 s. Shots
+arrive every 0.333 s, so each tail has decayed below -30 dB before the next transient.
+
+## Playback behavior
+
+Fixed pool: eight discharge and four detail voices (no per-shot allocation). Distance attenuation 12..220 studs
+(Mauler rolloff starts at 22). Cockpit mix uses the existing `CockpitAudio` state at 62 percent of exterior volume;
+MG-9/LR-12 keep low 0 / mid -2 dB / high -14 dB, the Mauler uses low +3 / mid -4 / high -20 dB so the cockpit keeps
+structural thump but loses bite. Voices stop on swap, recall and ejection. A weapon whose asset id is empty stays
+silent (no substitute sample, no invented id).

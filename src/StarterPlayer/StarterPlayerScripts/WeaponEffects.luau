@@ -4,6 +4,7 @@ local Components=require(Shared.ComponentRegistry)
 local Config=require(Shared.WeaponPresentation)
 local Casings=require(script.Parent.WeaponCasings)
 local Audio=require(script.Parent.WeaponAudio)
+local Atmosphere=require(script.Parent.CockpitAudio)
 local Effects={}
 Effects.__index=Effects
 local function part(name,size,color,parent)
@@ -32,6 +33,7 @@ function Effects:Emit(model,socket,id,origin,endpoint,normal,damage)
     local folder=Instance.new("Folder")
     folder.Name,folder.Parent=spec.effect,self.root
     local laser=spec.category=="laser"
+    local heavy=Config.heavy[id]
     local color=if laser then Color3.fromRGB(72,208,255) else Color3.fromRGB(255,160,58)
     local muzzle=model:FindFirstChild("Weapon_"..socket.."_Emitter")
     local start=muzzle and muzzle.Position or origin
@@ -43,22 +45,38 @@ function Effects:Emit(model,socket,id,origin,endpoint,normal,damage)
     local halo=laser and part("BeamHalo",Vector3.one*0.16,color,folder) or nil
     if halo then halo.CFrame=beam.CFrame;halo.Size=Vector3.new(0.16,0.16,beam.Size.Z);halo.Transparency=0.7 end
     local variation=self.random:NextNumber(0.8,1.18)
-    local flash=part("MuzzleFlash",if laser then Vector3.one*0.45 else Vector3.new(0.25,0.25,0.65)*variation,color,folder)
+    local flashSize=if laser then Vector3.one*0.45 elseif heavy then Vector3.new(heavy.flash[1],heavy.flash[2],heavy.flash[3])*variation else Vector3.new(0.25,0.25,0.65)*variation
+    local flash=part("MuzzleFlash",flashSize,color,folder)
     flash.Shape,flash.CFrame=Enum.PartType.Ball,cf
     local light=Instance.new("PointLight")
-    light.Color,light.Range,light.Brightness,light.Parent=color,if laser then 8 else 5,if laser then 1.4 else 0.6,flash
-    local impact=part("ContactFlash",Vector3.one*(if damage>0 then 0.65 else 0.3),if damage>0 then Color3.fromRGB(226,247,255) else color,folder)
+    -- A heavy flash is dimmed in the cockpit view so it stays comfortable at close range.
+    local lightPeak=if laser then 1.4 elseif heavy then heavy.light*(1-(1-heavy.cockpitLight)*Atmosphere.CockpitMix()) else 0.6
+    light.Color,light.Range,light.Brightness,light.Parent=color,if laser then 8 elseif heavy then heavy.lightRange else 5,lightPeak,flash
+    local impactBase=(if damage>0 then 0.65 else 0.3)*(if heavy then heavy.impactSize else 1)
+    local impact=part("ContactFlash",Vector3.one*impactBase,if damage>0 then Color3.fromRGB(226,247,255) else color,folder)
     impact.Shape,impact.CFrame=Enum.PartType.Ball,CFrame.lookAt(endpoint,endpoint+normal)
     local sparks=Instance.new("ParticleEmitter")
     sparks.Name,sparks.Texture="ResidualDischarge","rbxasset://textures/particles/sparkles_main.dds"
-    sparks.Color,sparks.Lifetime,sparks.Speed=ColorSequence.new(color),NumberRange.new(0.09,if laser then 0.28 else 0.16),NumberRange.new(3,if laser then 10 else 14)
+    sparks.Color,sparks.Lifetime,sparks.Speed=ColorSequence.new(color),NumberRange.new(0.09,if laser then 0.28 elseif heavy then 0.3 else 0.16),NumberRange.new(3,if laser then 10 elseif heavy then heavy.sparkSpeed else 14)
     sparks.Rate,sparks.SpreadAngle,sparks.LightEmission=0,Vector2.new(70,70),0.8
     sparks.EmissionDirection=Enum.NormalId.Front
-    sparks.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,0.13),NumberSequenceKeypoint.new(1,0)})
-    sparks.Parent=impact;sparks:Emit(if laser then 8 else 4)
+    sparks.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,if heavy then 0.24 else 0.13),NumberSequenceKeypoint.new(1,0)})
+    sparks.Parent=impact;sparks:Emit(if laser then 8 elseif heavy then (if damage>0 then heavy.sparks else 5) else 4)
+    if heavy and damage>0 then
+        -- Cosmetic armor chips: dark fragments thrown from a server-confirmed mechanical hit, falling under gravity.
+        local chips=Instance.new("ParticleEmitter")
+        chips.Name,chips.Texture="ArmorFragments","rbxasset://textures/particles/sparkles_main.dds"
+        chips.Color,chips.LightEmission=ColorSequence.new(Color3.fromRGB(70,74,72)),0
+        chips.Lifetime,chips.Speed,chips.SpreadAngle=NumberRange.new(0.35,0.55),NumberRange.new(10,26),Vector2.new(65,65)
+        chips.Acceleration,chips.Rate,chips.EmissionDirection=Vector3.new(0,-70,0),0,Enum.NormalId.Front
+        chips.Rotation,chips.RotSpeed=NumberRange.new(0,360),NumberRange.new(-420,420)
+        chips.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,0.2),NumberSequenceKeypoint.new(1,0.1)})
+        chips.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(0.8,0),NumberSequenceKeypoint.new(1,1)})
+        chips.Parent=impact;chips:Emit(heavy.fragments)
+    end
     local portCarrier=model:FindFirstChild("Weapon_"..socket.."_EjectionPort")
     local port=portCarrier and portCarrier:FindFirstChild("EjectionPort")
-    local portFlash
+    local portFlash,blast
     if not laser then
         local attachment=Instance.new("Attachment")
         attachment.Parent=flash
@@ -71,19 +89,30 @@ function Effects:Emit(model,socket,id,origin,endpoint,normal,damage)
         smoke.Acceleration=Vector3.new(0,3,0)
         smoke.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,0.15),NumberSequenceKeypoint.new(1,0.7)})
         smoke.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.7),NumberSequenceKeypoint.new(1,1)})
-        smoke.Parent=attachment;smoke:Emit(2)
-        if port then
-            portFlash=part("PortFlash",Vector3.one*0.12,Color3.fromRGB(219,130,53),folder)
-            portFlash.Position=port.WorldPosition
-            self.audio:Play("receiver",port.WorldPosition,model,socket)
+        if heavy then
+            smoke.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,0.5),NumberSequenceKeypoint.new(1,2.0)})
+            smoke.Lifetime=NumberRange.new(0.3,0.6)
+            smoke.Speed=NumberRange.new(6,12)
+            smoke.SpreadAngle=Vector2.new(22,22)
+            -- Pressure blast: one expanding translucent shell at the muzzle (cosmetic, no collision, one part).
+            blast=part("PressureBlast",Vector3.one*0.6,Color3.fromRGB(255,226,170),folder)
+            blast.Shape,blast.Material,blast.Transparency=Enum.PartType.Ball,Enum.Material.SmoothPlastic,0.55
+            blast.CFrame=cf
         end
-        self.casings:Emit(model,socket)
+        smoke.Parent=attachment;smoke:Emit(if heavy then heavy.smoke else 2)
+        if port then
+            portFlash=part("PortFlash",Vector3.one*(if heavy then heavy.portFlash else 0.12),Color3.fromRGB(219,130,53),folder)
+            portFlash.Position=port.WorldPosition
+            self.audio:Play(if heavy then "receiverHeavy" else "receiver",port.WorldPosition,model,socket)
+        end
+        self.casings:Emit(model,socket,id)
     end
-    self.audio:Play(if laser then "laser" else "machine",start,model,socket)
+    self.audio:Play(if laser then "laser" elseif heavy then "mauler" else "machine",start,model,socket)
     model:SetAttribute("WeaponVisualSocket",socket)
     model:SetAttribute("WeaponVisualShotAt",workspace:GetServerTimeNow())
     table.insert(self.entries,{folder=folder,owner=model,socket=socket,muzzle=muzzle,origin=origin,endpoint=endpoint,beam=beam,halo=halo,
-        flash=flash,impact=impact,port=port,portFlash=portFlash,laser=laser,variation=variation,born=os.clock(),confirmed=damage>0})
+        flash=flash,impact=impact,port=port,portFlash=portFlash,laser=laser,variation=variation,born=os.clock(),confirmed=damage>0,
+        heavy=heavy,blast=blast,lightPeak=lightPeak,life=if heavy then heavy.life else Config.effectLifetime})
     self.stats.peak=math.max(self.stats.peak,#self.entries)
 end
 function Effects:Step(dt)
@@ -91,7 +120,7 @@ function Effects:Step(dt)
     for i=#self.entries,1,-1 do
         local e=self.entries[i]
         local age=now-e.born
-        if age>Config.effectLifetime or not e.owner.Parent or e.owner:GetAttribute("Deployment")~="ACTIVE" or e.owner:GetAttribute("State")~="OPERATIONAL" or e.owner:GetAttribute("WeaponSocket")~=e.socket then
+        if age>e.life or not e.owner.Parent or e.owner:GetAttribute("Deployment")~="ACTIVE" or e.owner:GetAttribute("State")~="OPERATIONAL" or e.owner:GetAttribute("WeaponSocket")~=e.socket then
             self:Remove(i);continue
         end
         local origin=e.muzzle and e.muzzle.Parent and e.muzzle.Position or e.origin
@@ -108,15 +137,22 @@ function Effects:Step(dt)
             -- A short luminous tracer segment, cosmetic only: authoritative damage already resolved immediately.
             local center=origin:Lerp(e.endpoint,math.clamp(age/0.035,0,1))
             local tracerLength=math.min(12,length)
-            e.beam.Size,e.beam.CFrame=Vector3.new(0.055,0.055,math.max(tracerLength,0.01)),CFrame.lookAt(center,e.endpoint+(e.endpoint-origin).Unit)
-            e.beam.Transparency=math.clamp(age/0.055,0,1)
-            if e.portFlash then e.portFlash.Position=e.port.WorldPosition;e.portFlash.Transparency=math.clamp(age/0.04,0,1) end
+            local width=if e.heavy then e.heavy.tracer else 0.055
+            e.beam.Size,e.beam.CFrame=Vector3.new(width,width,math.max(tracerLength,0.01)),CFrame.lookAt(center,e.endpoint+(e.endpoint-origin).Unit)
+            e.beam.Transparency=math.clamp(age/(if e.heavy then 0.07 else 0.055),0,1)
+            if e.portFlash then e.portFlash.Position=e.port.WorldPosition;e.portFlash.Transparency=math.clamp(age/(if e.heavy then 0.07 else 0.04),0,1) end
+            if e.blast then
+                local t=math.clamp(age/e.heavy.blastTime,0,1)
+                e.blast.Size=Vector3.one*(0.6+(e.heavy.blast-0.6)*(1-(1-t)*(1-t)))
+                e.blast.CFrame=CFrame.lookAt(origin,e.endpoint)
+                e.blast.Transparency=0.55+0.45*t
+            end
         end
         e.flash.CFrame=CFrame.lookAt(origin,e.endpoint)
-        e.flash.Transparency=math.clamp(age/(if e.laser then 0.12 else 0.045),0,1)
-        e.flash.PointLight.Brightness=math.max(0,(if e.laser then 1.4 else 0.6)*(1-age/0.09))
-        e.impact.Transparency=math.clamp(age/(if e.laser then 0.22 else 0.12),0,1)
-        e.impact.Size=Vector3.one*((if e.confirmed then 0.65 else 0.3)+age*(if e.laser then 2 else 1))
+        e.flash.Transparency=math.clamp(age/(if e.laser then 0.12 elseif e.heavy then 0.075 else 0.045),0,1)
+        e.flash.PointLight.Brightness=math.max(0,e.lightPeak*(1-age/(if e.heavy then 0.12 else 0.09)))
+        e.impact.Transparency=math.clamp(age/(if e.laser then 0.22 elseif e.heavy then 0.18 else 0.12),0,1)
+        e.impact.Size=Vector3.one*((if e.confirmed then 0.65 else 0.3)*(if e.heavy then e.heavy.impactSize else 1)+age*(if e.laser then 2 elseif e.heavy then 3 else 1))
     end
     self.casings:Step(dt)
     self.audio:Step()

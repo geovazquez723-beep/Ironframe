@@ -34,7 +34,7 @@ end
 
 export type Rig = {
     model: Model,
-    parts: { { part: BasePart, joint: string, socket: string?, bolt: boolean?, localCF: CFrame } },
+    parts: { { part: BasePart, joint: string, socket: string?, bolt: boolean?, barrel: boolean?, localCF: CFrame } },
     linkParts: { { part: BasePart, link: any, role: string, end_: string, offset: number } },
 }
 
@@ -58,6 +58,7 @@ function MechRig.Bind(model: Model): Rig
                     part = descendant,
                     joint = jointName,
                     bolt = descendant:GetAttribute("WeaponBolt") == true,
+                    barrel = descendant:GetAttribute("WeaponBarrel") == true,
                     socket = string.match(descendant.Name, "^Weapon_(%a+_%a+)_"),
                     localCF = descendant:GetAttribute("LocalCF") or CFrame.identity,
                 })
@@ -69,31 +70,38 @@ end
 
 -- Returns the solved world frame of every joint (the cockpit camera reads Torso from it).
 function MechRig.Apply(rig: Rig, rootCF: CFrame, angles: { [string]: number }?): { [string]: CFrame }
-    local world = MechRig.Solve(rootCF, angles)
     local count = #rig.parts + #rig.linkParts
     local partList: { BasePart } = table.create(count)
     local cframes: { CFrame } = table.create(count)
 
     local selected = rig.model:GetAttribute("WeaponSocket")
     local aim = rig.model:GetAttribute("WeaponAim")
-    local weaponBase, inverseMount, cycle = nil,nil,0
-    if selected and RigSpec.Sockets[selected] and aim and rig.model:GetAttribute("Deployment") == "ACTIVE" then
+    local spec, amount = nil, 0
+    local aimed = selected and RigSpec.Sockets[selected] and aim and rig.model:GetAttribute("Deployment") == "ACTIVE"
+    if aimed then
         local preset = Loadouts.presets[rig.model:GetAttribute("PresetId")]
-        local spec = preset and Presentation.recoil[preset.mounts[selected]]
+        spec = preset and Presentation.recoil[preset.mounts[selected]]
         local shotAt = rig.model:GetAttribute("WeaponShotAt") or -100
         local visualSocket = rig.model:GetAttribute("WeaponVisualSocket")
         if visualSocket then shotAt = if visualSocket == selected then rig.model:GetAttribute("WeaponVisualShotAt") or shotAt else -100 end
-        local amount = if spec then Motion.Recoil(workspace:GetServerTimeNow() - shotAt,spec) else 0
-        local distance = spec and spec.distance*amount or 0
-        cycle = spec and spec.cycle*amount or 0
-        weaponBase = Geometry.Mount(world, selected, aim) * CFrame.new(0,0,distance) * CFrame.Angles(spec and spec.pitch*amount or 0,0,0)
+        amount = if spec then Motion.Recoil(workspace:GetServerTimeNow() - shotAt,spec) else 0
+    end
+    -- Heavy weapons nudge the whole body backward-pitch a fraction of a degree. Cosmetic: rootCF is only the pose input.
+    if spec and spec.torso and amount > 0 then rootCF = rootCF * CFrame.Angles(spec.torso * amount, 0, 0) end
+    local world = MechRig.Solve(rootCF, angles)
+    local weaponBase, inverseMount, cycle, barrelSlide = nil,nil,0,0
+    if aimed then
+        cycle = if spec then spec.cycle*amount else 0
+        barrelSlide = if spec then (spec.barrel or 0)*amount else 0
+        weaponBase = Geometry.Mount(world, selected, aim) * CFrame.new(0,0,if spec then spec.distance*amount else 0)
+            * CFrame.Angles(if spec then spec.pitch*amount else 0,0,0)
         inverseMount = RigSpec.SocketLocalCF(selected):Inverse()
     end
     for _, entry in ipairs(rig.parts) do
         table.insert(partList, entry.part)
         local cf = world[entry.joint] * entry.localCF
         if weaponBase and entry.socket == selected then
-            cf = weaponBase * CFrame.new(0,0,if entry.bolt then cycle else 0) * inverseMount * entry.localCF
+            cf = weaponBase * CFrame.new(0,0,if entry.bolt then cycle elseif entry.barrel then -barrelSlide else 0) * inverseMount * entry.localCF
         end
         table.insert(cframes, cf)
     end

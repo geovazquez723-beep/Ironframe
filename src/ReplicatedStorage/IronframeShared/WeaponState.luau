@@ -37,7 +37,11 @@ function Weapon.Fire(s, socket, now, enabled, validAim, pay)
     end
     if reason then s.reason = reason; return false end
     -- An unfunded attempt is rate limited too. No ammo, heat or energy is spent on rejection.
-    slot.nextShot = now + slot.spec.interval
+    -- Optional phase lock (spec.phaseLock seconds): a held trigger keeps its exact schedule instead of rounding every
+    -- interval up to the next server frame, so slow weapons deliver their nominal rate. Never permits a catch-up burst.
+    local base = slot.nextShot
+    slot.nextShot = if slot.spec.phaseLock and base > 0 and now - base <= slot.spec.phaseLock then base + slot.spec.interval
+        else now + slot.spec.interval
     if not pay(slot.spec.energy, slot.spec.heat) then s.reason = "ENERGY LOW"; return false end
     slot.ammo -= slot.spec.ammoPerShot
     s.shots += 1

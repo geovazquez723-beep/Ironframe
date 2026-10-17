@@ -58,6 +58,9 @@ local function validatePresets()
     print("[IF-STEP-02] Verified loadouts: " .. count)
 end
 
+local presetNames = {}
+for _, id in ipairs(Loadouts.order) do presetNames[id] = Loadouts.presets[id].name end
+
 local function publicState(player, message)
     local session = sessions[player]
     if not session then
@@ -69,11 +72,7 @@ local function publicState(player, message)
         presetId = session.presetId,
         presetName = loadout.name,
         presetOrder = Loadouts.order,
-        presetNames = {
-            BALANCED = Loadouts.presets.BALANCED.name,
-            ENERGY = Loadouts.presets.ENERGY.name,
-            MISSILE = Loadouts.presets.MISSILE.name,
-        },
+        presetNames = presetNames,
         compiled = Compiler.Compile(loadout),
         machineState = session.machineState,
         pilotSafe = session.pilotSafe,

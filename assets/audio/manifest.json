@@ -7,8 +7,9 @@
   "peak_dbfs": -3.01,
   "rms_dbfs": -18.44,
   "sha256": "27ebc063788d330ec2acba1c7eae31f4a8644b622ef54ba09e462d3677412dc5",
-  "asset_id": null,
-  "status": "awaiting_manual_upload_and_experience_permission_check",
+  "asset_id": "123083870222487",
+  "status": "registered_approved_active",
   "source": "Original deterministic synthesis; tools/synthesize_weapon_audio.py; seed 1209",
-  "rights": "Original mathematical synthesis for Ironframe. No third-party samples. CC0-1.0."
+  "rights": "Original mathematical synthesis for Ironframe. No third-party samples. CC0-1.0.",
+  "validated_at": "2026-10-17T16:45:23Z"
 }

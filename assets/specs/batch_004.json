@@ -1,0 +1,22 @@
+{
+  "specVersion": 1,
+  "batch": "batch_004",
+  "style": "Grounded military-industrial battle mech hardware: olive-drab armor plates, dark gunmetal frame, graphite housings, steel actuators, bolted seams, small yellow marks. Machine part, not wearable. No text.",
+  "assets": [
+    {
+      "id": "WPN_020",
+      "category": "weapon",
+      "name": "HeavyAutocannonHousing",
+      "prompt": "Armored autocannon module bolted to a giant combat robot arm, long axis forward: a massive boxy armored receiver with thick plates, a cylindrical recoil cradle with ribbed buffer rings, a reinforced vented barrel shroud, a vented muzzle brake, a square ammo box feed on one side. Flat rear mounting plate. No stock, no grip, no trigger, no hand.",
+      "size": {
+        "x": 2.6,
+        "y": 2.6,
+        "z": 9.0
+      },
+      "maxTriangles": 9000,
+      "segmentation": "none",
+      "intendedUse": "Candidate exterior housing for logical weapon W_HMG_MAULER (HMG-20)",
+      "rig": "Barrel toward -Z, breech at origin after fit"
+    }
+  ]
+}

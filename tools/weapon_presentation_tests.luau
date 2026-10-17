@@ -33,7 +33,9 @@ test("recoil attacks briefly and recovers without drift or overextension",functi
             local v=Motion.Recoil(t,spec)
             assert(v>=0 and v<=previous+1e-9);previous=v
         end
-        assert(spec.distance<0.3 and spec.pitch<0.01)
+        local heavy=spec==Config.recoil.W_HMG_MAULER
+        assert(spec.distance<(if heavy then 0.75 else 0.3) and spec.pitch<(if heavy then 0.02 else 0.01))
+        assert((spec.torso or 0)<=0.005 and (spec.barrel or 0)<=spec.distance)
     end
 end)
 test("floor bounce reverses normal motion and damps slide",function()
@@ -57,6 +59,25 @@ test("voice budget is fixed and laser has no unrelated fallback",function()
     assert(Config.audio.pitchVariation>0 and Config.audio.pitchVariation<=0.04)
     assert(Config.audio.laserAssetId=="" or string.match(Config.audio.laserAssetId,"^rbxassetid://%d+$"))
     assert(Components.W_LASER_RIFLE.combat.sound==nil,"old UI beep remains in weapon definition")
+end)
+test("m08d: heavy recoil is stronger than MG-9 but recovers before the next 3 Hz shot",function()
+    local h,m=Config.recoil.W_HMG_MAULER,Config.recoil.W_MACHINE_GUN
+    assert(h.distance>m.distance*2 and h.pitch>m.pitch and h.recoverTime<=1/3-0.05)
+    near(Motion.Recoil(h.recoverTime,h),0)
+end)
+test("m08d: heavy casing is larger, bounded and has its own port, cap and cockpit margin",function()
+    local c,b=Config.casingProfiles.W_HMG_MAULER,Config.casing
+    assert(c.length>b.length*2 and c.diameter>b.diameter*2 and c.lift>b.lift and c.speed>b.speed)
+    assert(c.lifetime<=3.2 and c.typeLimit>=6 and c.typeLimit<b.limit and c.protect>0.4)
+    assert(c.portSide>0.5 and Components.W_HMG_MAULER.combat.muzzle+c.portZ>4 and #c.boltSize==3)
+    assert(Config.audio.maulerAssetId=="" or string.match(Config.audio.maulerAssetId,"^rbxassetid://%d+$"))
+    assert(Config.audio.maulerDuration>=0.4 and Config.audio.maulerDuration<=0.8)
+    assert(Config.audio.dischargeVoices+Config.audio.detailVoices<=12)
+    assert(Config.audio.laserAssetId=="rbxassetid://123083870222487")
+end)
+test("m08d: heavy effect budgets stay cosmetic and short",function()
+    local h=Config.heavy.W_HMG_MAULER
+    assert(h.life<=0.75 and h.fragments<=8 and h.sparks<=20 and h.smoke<=8 and h.cockpitLight<1 and h.blastTime<0.15)
 end)
 print(string.format("\n%d passed, %d failed",passed,failed))
 assert(failed==0,"presentation regressions failed")

@@ -1,0 +1,40 @@
+{
+  "batch": "batch_004",
+  "specVersion": 1,
+  "assets": {
+    "WPN_020": {
+      "status": "REJECTED",
+      "retryCount": 1,
+      "attempts": [
+        {
+          "status": "REJECTED",
+          "generationId": "99dae30e-831c-4599-be53-bda8a9bac440",
+          "publishedAssetId": "138102814864499",
+          "boundingBox": [
+            1.608,
+            2.8,
+            7.676
+          ],
+          "meshPartCount": 1,
+          "promptVariant": "heavy 20mm autocannon: receiver, recoil cradle, vented shroud/brake, side ammo drum, rear yoke",
+          "evaluation": "Inspected in Studio Play next to the Bastion. Reads as a human-style light machine gun (stock, pistol grip, drum, scope): not a mech-mounted heavy cannon, grip/stock conflict with the arm socket, and no visual weight increase over WPN_010. Rejected; no registry entry.",
+          "recordedAt": "2026-10-17T17:05:11+00:00"
+        },
+        {
+          "status": "REJECTED",
+          "generationId": "02290717-fcfd-4964-9e93-c4f232594394",
+          "publishedAssetId": "115137389737734",
+          "boundingBox": [
+            1.629,
+            2.6,
+            5.511
+          ],
+          "meshPartCount": 1,
+          "promptVariant": "armored autocannon module for robot arm; explicitly no stock/grip/trigger",
+          "evaluation": "Inspected in Studio Play. Pistol-like outline with grip and a detached box, pale untextured look, 5.5 stud length (shorter than requested 9). Rejected; the procedural HMG-20 assembly (receiver, recoil housing, sliding barrel/brake, feed drum, ejection port) is retained.",
+          "recordedAt": "2026-10-17T17:05:11+00:00"
+        }
+      ]
+    }
+  }
+}

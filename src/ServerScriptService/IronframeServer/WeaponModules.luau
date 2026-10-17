@@ -67,6 +67,49 @@ builders.W_MACHINE_GUN = function(m)
     m:cylZ("Muzzle", 0.5, 0.95, C(0, 0, -5.4), p.dark, "weapon")
 end
 
+builders.W_HMG_MAULER = function(m)
+    local p, side = m.palette, m.side -- side: -1 left arm, +1 right arm; ejection port faces outward, feed faces inward
+    -- Armored receiver with a stepped top cover and flank plates.
+    m:box("Receiver", V(1.9, 1.8, 3.4), C(0, 0, -1.7), p.secondary, "weapon")
+    m:box("ReceiverCover", V(1.5, 0.32, 2.7), C(0, 1.05, -1.9), p.primary, "weapon")
+    m:box("CoverStep", V(1.1, 0.24, 1.2), C(0, 1.3, -1.3), p.dark, "weapon")
+    -- Armor plate on the inboard flank only; the outboard flank stays open around the ejection port.
+    m:box("FlankPlate", V(0.16, 1.5, 2.2), C(-side * 1.0, 0, -1.9), p.primary, "weapon")
+    m:box("PortSurround", V(0.1, 1.1, 1.9), C(side * 0.98, 0.05, -1.5), p.primary, "weapon")
+    -- Heavy mounting yoke and rear braces (the existing socket frame is untouched; this is weapon-side hardware).
+    m:box("MountYoke", V(2.3, 2.1, 0.55), C(0, 0, 0.1), p.dark, "weapon")
+    for _, s in ipairs({ -1, 1 }) do
+        m:box("YokeBrace" .. (s < 0 and "L" or "R"), V(0.3, 0.3, 2.0), C(s * 0.8, -0.95, -0.7), p.steel, "weapon")
+    end
+    -- Recoil housing around the barrel root, with buffer rings.
+    m:cylZ("RecoilHousing", 2.4, 1.4, C(0, 0, -4.4), p.dark, "weapon")
+    for i, z in ipairs({ -3.4, -4.1, -4.8, -5.5 }) do
+        m:cylZ("BufferRing" .. i, 0.18, 1.52, C(0, 0, z), p.steel, "weapon")
+    end
+    -- Fixed reinforced shroud, then the sliding barrel and muzzle brake (tagged so recoil slides them).
+    m:cylZ("BarrelShroud", 1.8, 1.0, C(0, 0, -6.35), p.secondary, "weapon")
+    for i, z in ipairs({ -5.8, -6.4, -7.0 }) do
+        m:box("ShroudVent" .. i, V(1.06, 0.12, 0.34), C(0, 0.5, z), p.dark, "weapon")
+    end
+    local barrel = m:cylZ("HeavyBarrel", 3.2, 0.62, C(0, 0, -6.8), p.steel, "weapon")
+    if barrel then barrel:SetAttribute("WeaponBarrel", true) end
+    local brake = m:cylZ("MuzzleBrake", 0.95, 1.05, C(0, 0, -7.55), p.dark, "weapon")
+    if brake then brake:SetAttribute("WeaponBarrel", true) end
+    for _, s in ipairs({ -1, 1 }) do
+        local fin = m:box("BrakeBaffle" .. (s < 0 and "L" or "R"), V(0.12, 0.8, 0.62), C(s * 0.58, 0, -7.55), p.steel, "weapon")
+        if fin then fin:SetAttribute("WeaponBarrel", true) end
+    end
+    -- Visible ammunition feed: drum on the inboard flank with a curved chute into the receiver.
+    m:box("AmmoDrum", V(1.1, 1.7, 1.7), C(-side * 1.55, -0.45, -1.6), p.accent, "weapon")
+    m:box("DrumBand", V(1.16, 0.2, 1.76), C(-side * 1.55, 0.0, -1.6), p.dark, "weapon")
+    m:box("FeedChute", V(0.7, 0.55, 0.9), C(-side * 1.05, 0.45, -2.3), p.dark, "weapon")
+    m:box("FeedChuteArm", V(0.45, 0.4, 0.7), C(-side * 0.85, 0.7, -2.9), p.steel, "weapon")
+    -- Large-caliber ejection port frame on the outboard flank.
+    m:box("PortFrameTop", V(0.2, 0.14, 1.25), C(side * 1.06, 0.62, -1.5), p.steel, "weapon")
+    m:box("PortFrameBottom", V(0.2, 0.14, 1.25), C(side * 1.06, -0.04, -1.5), p.steel, "weapon")
+    m:box("PortShade", V(0.1, 0.5, 1.0), C(side * 1.03, 0.29, -1.5), p.dark, "weapon")
+end
+
 builders.W_MISSILE_POD = function(m)
     local p = m.palette
     m:box("PodBody", V(2.3, 1.9, 3.4), C(0, 0, -1.7), p.secondary, "weapon")
@@ -128,10 +171,15 @@ function WeaponModules.Build(kit, weaponId, socketName, joint, mountCF, palette)
             mountCF * C(0,0,-component.combat.muzzle), palette.beam, "weapon")
         muzzle.Transparency = 1
         muzzle:SetAttribute("WeaponMuzzle", true)
+        -- Weapons whose recoil slides the barrel carry their flash/tracer origin with it (it is the barrel tip).
+        local recoil = require(game.ReplicatedStorage.IronframeShared.WeaponPresentation).recoil[weaponId]
+        if recoil and recoil.barrel then muzzle:SetAttribute("WeaponBarrel", true) end
     end
-    if weaponId == "W_MACHINE_GUN" then
-        local fx = require(game.ReplicatedStorage.IronframeShared.WeaponPresentation).casing
+    local presentation = require(game.ReplicatedStorage.IronframeShared.WeaponPresentation)
+    local fx = if weaponId == "W_MACHINE_GUN" then presentation.casing else presentation.casingProfiles[weaponId]
+    if fx then
         local side = if string.sub(socketName,1,4) == "left" then -1 else 1
+        local boltSize = fx.boltSize or { 0.08, 0.25, 0.52 }
         -- The carrier is rigged with the imported/procedural assembly. LookVector points OUT from the receiver.
         local portCF = mountCF * C(side*fx.portSide,fx.portY,fx.portZ) * CFrame.Angles(0,-side*math.pi/2,0)
         local carrier = kit:box("Weapon_"..socketName.."_EjectionPort",joint,V(0.12,0.12,0.12),portCF,palette.steel,"weapon")
@@ -139,7 +187,7 @@ function WeaponModules.Build(kit, weaponId, socketName, joint, mountCF, palette)
         local attachment = Instance.new("Attachment")
         attachment.Name,attachment.Parent = "EjectionPort",carrier
         -- Small visible bolt / port rim on the receiver, also retained when an imported mesh is used.
-        local bolt = kit:box("Weapon_"..socketName.."_Bolt",joint,V(0.08,0.25,0.52),
+        local bolt = kit:box("Weapon_"..socketName.."_Bolt",joint,V(boltSize[1],boltSize[2],boltSize[3]),
             mountCF*C(side*(fx.portSide-0.08),fx.portY,fx.portZ),palette.steel,"weapon")
         bolt:SetAttribute("WeaponBolt",true)
     end
@@ -155,7 +203,7 @@ function WeaponModules.Build(kit, weaponId, socketName, joint, mountCF, palette)
         end
     end
     local builder = builders[weaponId] or fallback
-    local module = { palette = palette }
+    local module = { palette = palette, side = if string.sub(socketName,1,4) == "left" then -1 else 1 }
     local function name(part)
         return "Weapon_" .. socketName .. "_" .. part
     end

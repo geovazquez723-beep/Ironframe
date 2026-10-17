@@ -363,6 +363,27 @@ test("m08a: invalid resource components are rejected", function()
     assert(not Compiler.Compile(invalid).valid)
 end)
 
+test("m08d: HMG-20 preset compiles, rejects shoulder fit and builds a ported, barrel-tagged Mauler", function()
+    local compiled = Compiler.Compile(Loadouts.presets.AUTOCANNON)
+    assert(compiled.valid, table.concat(compiled.issues, "; "))
+    local bad = preset("AUTOCANNON")
+    bad.mounts.left_shoulder = "W_HMG_MAULER"
+    assert(not Compiler.Compile(bad).valid and hasIssue(Compiler.Compile(bad), "Incompatible weapon"))
+    for _, useAssets in ipairs({ true, false }) do
+        local model = Factory.Create(1, "AUTOCANNON", Loadouts.presets.AUTOCANNON, Vector3.zero, { useAssets = useAssets })
+        local carrier = model:FindFirstChild("Weapon_right_arm_EjectionPort", true)
+        assert(carrier and carrier:FindFirstChild("EjectionPort"), "Mauler needs an ejection port")
+        assert(model:FindFirstChild("Weapon_right_arm_Bolt", true), "Mauler needs a cycling bolt")
+        local barrels = 0
+        for _, d in ipairs(model:GetDescendants()) do
+            if d:IsA("BasePart") and d:GetAttribute("WeaponBarrel") and string.find(d.Name, "^Weapon_right_arm_") then barrels += 1 end
+        end
+        assert(barrels >= 3, "Mauler barrel/brake must be tagged for recoil slide")
+        assert(model:FindFirstChild("Weapon_left_arm_EjectionPort", true) == nil, "LR-12 must not eject brass")
+        model:Destroy()
+    end
+end)
+
 function SelfTest.Run()
     local result = { passed = 0, total = #tests, failed = {} }
     for _, t in ipairs(tests) do

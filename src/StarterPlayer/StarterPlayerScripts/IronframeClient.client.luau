@@ -51,8 +51,8 @@ local function button(parent, name, text, pos, action)
 end
 local panel = Instance.new("Frame")
 panel.Name = "StatsPanel"
-panel.Size = UDim2.fromOffset(324, 585)
-panel.Position = UDim2.new(0, 22, 0.5, -292)
+panel.Size = UDim2.fromOffset(324, 631)
+panel.Position = UDim2.new(0, 22, 0.5, -315)
 panel.BackgroundColor3 = Color3.fromRGB(17, 24, 32)
 panel.BackgroundTransparency = 0.1
 panel.BorderSizePixel = 0
@@ -67,9 +67,10 @@ label(panel, "LoadoutsLabel", "LOADOUT PRESETS", UDim2.fromOffset(288, 28), UDim
 button(panel, "Balanced", "GENERAL PURPOSE", UDim2.fromOffset(18, 278), function() setPreset:FireServer("BALANCED") end)
 button(panel, "Energy", "PLASMA SPECIALIST", UDim2.fromOffset(18, 324), function() setPreset:FireServer("ENERGY") end)
 button(panel, "Missile", "MISSILE BARRAGE", UDim2.fromOffset(18, 370), function() setPreset:FireServer("MISSILE") end)
-button(panel, "Eject", "TEST SAFE EJECTION", UDim2.fromOffset(18, 431), function() requestEject:FireServer() end)
-local status = label(panel, "Status", "System nominal", UDim2.fromOffset(288, 25), UDim2.fromOffset(17, 478), Color3.fromRGB(255, 178, 66), 13)
-local diag = label(panel, "Diagnostics", "", UDim2.fromOffset(288, 70), UDim2.fromOffset(17, 508), Color3.fromRGB(140, 200, 160), 12)
+button(panel, "Autocannon", "HEAVY AUTOCANNON", UDim2.fromOffset(18, 416), function() setPreset:FireServer("AUTOCANNON") end)
+button(panel, "Eject", "TEST SAFE EJECTION", UDim2.fromOffset(18, 477), function() requestEject:FireServer() end)
+local status = label(panel, "Status", "System nominal", UDim2.fromOffset(288, 25), UDim2.fromOffset(17, 524), Color3.fromRGB(255, 178, 66), 13)
+local diag = label(panel, "Diagnostics", "", UDim2.fromOffset(288, 70), UDim2.fromOffset(17, 554), Color3.fromRGB(140, 200, 160), 12)
 local tip = label(gui, "CameraTip", "RIGHT-DRAG  Orbit  •  MIDDLE-DRAG  Focus height  •  R  Reset view     •     SCROLL  Zoom     •     V  Cockpit view     •     Ejection always safe", UDim2.new(0.8, 0, 0, 30), UDim2.new(0, 364, 1, -46), Color3.fromRGB(230, 238, 241), 14)
 tip.TextXAlignment = Enum.TextXAlignment.Center
 
@@ -80,7 +81,7 @@ local function display(data)
     end
     local m = data.compiled.metrics
     local stowed = data.deployment == nil or data.deployment == "STOWED"
-    for _, name in ipairs({ "Balanced", "Energy", "Missile" }) do
+    for _, name in ipairs({ "Balanced", "Energy", "Missile", "Autocannon" }) do
         panel[name].Active = stowed
         panel[name].AutoButtonColor = stowed
         panel[name].TextTransparency = if stowed then 0 else 0.55

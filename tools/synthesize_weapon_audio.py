@@ -76,7 +76,9 @@ def main():
             wav.writeframes(struct.pack("<" + "h"*len(values), *values))
     info = check(path)
     if not args.check:
-        info.update({"asset_id": None, "status": "awaiting_manual_upload_and_experience_permission_check",
+        previous = json.loads((DEST / "manifest.json").read_text(encoding="utf-8")) if (DEST / "manifest.json").exists() else {}
+        kept = previous.get("asset_id") if previous.get("sha256") == info["sha256"] else None  # regeneration is deterministic
+        info.update({"asset_id": kept, "status": previous.get("status") if kept else "awaiting_upload_use_tools_roblox_audio_upload",
                      "source": "Original deterministic synthesis; tools/synthesize_weapon_audio.py; seed 1209",
                      "rights": "Original mathematical synthesis for Ironframe. No third-party samples. CC0-1.0."})
         (DEST / "manifest.json").write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")

@@ -35,6 +35,16 @@ local ComponentRegistry = {
             hardpoints = { left_arm = true, right_arm = true, left_shoulder = true, right_shoulder = true },
             muzzle = 5.67, effect = "BALLISTIC" },
     },
+    -- M08D heavy autocannon. Arms only (size 3). 3 rounds/s, 3.1x MG-9 per-hit damage, 4.2x MG-9 per-shot energy:
+    -- slower, heavier and ammunition-limited, with a long reload window, so it is not a strict MG-9 upgrade.
+    W_HMG_MAULER = {
+        name = "HMG-20 Mauler", class = "weapon", family = "ballistic", size = 3,
+        mass = 5.0, powerDraw = 7, heatPerSecond = 3, nominalDps = 75,
+        combat = { category = "ballistic", damage = 25, interval = 1 / 3, range = 500, energy = 2.5,
+            heat = 0.9, mode = "AUTO", magazine = 24, ammoPerShot = 1, reload = 3.8, phaseLock = 0.05,
+            hardpoints = { left_arm = true, right_arm = true },
+            muzzle = 8.0, effect = "HEAVY_BALLISTIC" },
+    },
     W_MISSILE_POD = {
         name = "MR-6 Missile Pod", class = "weapon", family = "missile", size = 2,
         mass = 3.0, powerDraw = 6, heatPerSecond = 2, nominalDps = 30,
