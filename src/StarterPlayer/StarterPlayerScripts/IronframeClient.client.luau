@@ -140,3 +140,5 @@ CockpitMode.Start({ garage = GarageCamera, animator = ShowroomAnimator, remotes 
 require(script.Parent.BayClient).Start()
 require(script.Parent.DeploymentClient).Start(remotes, CockpitMode, ShowroomAnimator)
 require(script.Parent.ShieldClient).Start(ShowroomAnimator)
+
+require(script.Parent.WeaponClient).Start(remotes, CockpitMode)

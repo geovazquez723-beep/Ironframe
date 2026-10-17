@@ -14,6 +14,8 @@ local BayControl = require(script.Parent.BayControl)
 local RunService = game:GetService("RunService")
 local EnergySystems = require(script.Parent.EnergySystems)
 
+local Weapons = require(script.Parent.Weapons)
+local CombatTargets = require(script.Parent.CombatTargets)
 local sessions = {}
 local selfTestResult = { passed = 0, total = 0, failed = {} }
 local bayCounter = 0
@@ -36,6 +38,9 @@ local RequestReturn = remote("RemoteEvent", "RequestReturn")
 local DriveInput = remote("RemoteEvent", "DriveInput") -- (throttle, steer), sanitised and clamped server-side
 local RequestShield = remote("RemoteEvent", "RequestShield")
 local RequestEnergyTest = remote("RemoteEvent", "RequestEnergyTest")
+
+local WeaponIntent = remote("RemoteEvent", "WeaponIntent")
+local WeaponEffects = remote("RemoteEvent", "WeaponEffects")
 
 local function validatePresets()
     local count = 0
@@ -119,6 +124,7 @@ local function assemble(player)
     session.loadout = Loadouts.presets[session.presetId]
     session.machineState = "OPERATIONAL"
     session.power = EnergySystems.Create(model, Compiler.Compile(session.loadout).energy)
+    Weapons.Create(session)
     EnergySystems.Publish(session.power, true)
     setDeploymentAttributes(session)
     StateChanged:FireClient(player, publicState(player, "Loadout installed"))
@@ -161,6 +167,7 @@ RequestTestEject.OnServerEvent:Connect(function(player)
     Ejection.Run(session, {
         onPilotSafe = function()
             session.mech:SetAttribute("State", "PILOT_EVACUATED")
+            pcall(Weapons.Cancel, session)
             if session.power then pcall(EnergySystems.Cancel, session.power) end
             -- Where the mech is right now (the capsule rises from here, deployed or not). Read before anything can fail.
             local origin = session.bayPosition
@@ -272,6 +279,7 @@ RequestReturn.OnServerEvent:Connect(function(player)
     if not session or session.deployment ~= "ACTIVE" or not session.controller then return end
     local c = session.controller
     Deployment.Transition(session, "DOCKING")
+    Weapons.Cancel(session)
     EnergySystems.Cancel(session.power)
     c.input.throttle, c.input.steer = 0, 0
     local inside = math.abs(c.state.z - session.bayPosition.Z) < 55 and math.abs(c.state.x - session.bayPosition.X) < 60
@@ -314,6 +322,11 @@ RequestEnergyTest.OnServerEvent:Connect(function(player, patternId)
     EnergySystems.RequestTest(session.power, patternId, session.controller.state.yaw, Locomotion.Position(session.controller))
 end)
 
+WeaponIntent.OnServerEvent:Connect(function(player, index, held, aim, reload)
+    local session = sessions[player]
+    if session then Weapons.Intent(session,index,held,aim,reload) end
+end)
+
 -- One loop drives every deployed mech. dt is clamped inside MechDrive, so a hitch cannot launch anything.
 local driveStats = { stepMs = 0, active = 0 }
 RunService.Heartbeat:Connect(function(dt)
@@ -353,6 +366,9 @@ RunService.Heartbeat:Connect(function(dt)
             end
         end
     end
+    -- Weapon bursts spend only after all propulsion/shield substeps have settled. No second budget.
+    for _, session in pairs(sessions) do Weapons.Step(session,WeaponEffects) end
+    CombatTargets.Step(os.clock())
     driveStats.active = active
     if active > 0 then
         driveStats.stepMs += ((os.clock() - started) * 1000 - driveStats.stepMs) * 0.05

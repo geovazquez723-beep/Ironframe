@@ -77,6 +77,8 @@ function Client.Start(remotes, cameraMode, animator)
         local folder = workspace:FindFirstChild("IronframeMechs")
         local mech = folder and folder:FindFirstChild(tostring(player.UserId))
         deployment = mech and mech:GetAttribute("Deployment") or "EJECTED"
+        local garageGui = player.PlayerGui:FindFirstChild("IronframeGarageUI")
+        if garageGui then garageGui.StatsPanel.Visible = deployment == "STOWED" and cameraMode.Current() ~= "COCKPIT" end
         local speed = mech and mech:GetAttribute("DriveSpeed") or 0
         local drive = mech and mech:GetAttribute("DriveState") or "IDLE"
         local cf = mech and animator.ChassisCF(mech)

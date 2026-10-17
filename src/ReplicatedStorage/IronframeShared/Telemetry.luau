@@ -59,9 +59,13 @@ end
 Telemetry.Keys = {
     -- published today by IronframeClient from the authoritative GetGarageState / StateChanged payload (LIVE)
     "mech.preset", "mech.presetOrder", "mech.state", "pilot.safe", "pilot.torsoYaw",
-    "loadout.metrics", "loadout.mounts", "loadout.systems", "integrity.total", "diag.tests", "diag.rig", "weapons.selected",
+    "loadout.metrics", "loadout.mounts", "loadout.systems", "integrity.total", "diag.tests", "diag.rig",
+    -- M08B: accepted server firing state and per-hardpoint magazines.
+    "weapons.selected", "weapons.name", "weapons.state", "weapons.mode", "weapons.magazines", "weapons.ammo",
+    "weapons.magazine", "weapons.power", "weapons.cost", "weapons.heat", "weapons.cooldown", "weapons.reload",
+    "weapons.available", "weapons.shots", "weapons.hits", "weapons.lastTarget", "weapons.lastDamage",
     -- reserved for future systems; nothing publishes these yet, so the displays show STANDBY
-    "heat.level", "integrity.sections", "weapons.ammo", "movement.speed", "targeting.lock", "sensors.contacts",
+    "heat.level", "integrity.sections", "movement.speed", "targeting.lock", "sensors.contacts",
     "energy.charge", "energy.capacity", "energy.output", "energy.demand", "energy.supply", "energy.capRate",
     "energy.thermal", "energy.propulsion", "energy.deficit", "energy.weaponDemand",
     "shield.state", "shield.cooldown", "shield.integrity", "shield.reason", "shield.timing",

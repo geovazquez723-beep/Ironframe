@@ -250,7 +250,7 @@ local function buildArmament(display: Display)
         local ammo = label(row, "AMMO  STBY", UDim2.fromOffset(440, 0), UDim2.fromOffset(160, 50), { TextSize = 18, TextColor3 = DIM_TEXT, TextXAlignment = Enum.TextXAlignment.Right })
         widgets.weaponRows[socket.id] = { row = row, sel = sel, name = name, ammo = ammo }
     end
-    widgets.armamentFooter = label(c, "FIRE CONTROL: STANDBY  /  GROUPS: ARMS  SHOULDER  TORSO", UDim2.fromOffset(16, 350), UDim2.fromOffset(608, 52), { TextSize = 18, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
+    widgets.armamentFooter = label(c, "FIRE CONTROL: STANDBY  /  GROUPS: ARMS  SHOULDER  TORSO", UDim2.fromOffset(16, 350), UDim2.fromOffset(608, 88), { TextSize = 18, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
     display.refresh = function()
         local mounts = Telemetry.Value("loadout.mounts", {})
         local selected = Telemetry.Value("weapons.selected", 1)
@@ -259,10 +259,12 @@ local function buildArmament(display: Display)
             local component = Components[mounts[socket.id] or ""]
             w.name.Text = if component then string.upper(component.name) else "EMPTY"
             w.name.TextColor3 = if component then WHITE else DIM_TEXT
-            w.ammo.Text = if component then (if component.family == "energy" then "ENERGY" else "AMMO  STBY") else ""
+            local ammo = Telemetry.Value("weapons.magazines", {})[socket.id]
+            w.ammo.Text = if not component or not component.combat then "UNAVAILABLE" elseif component.combat.magazine == 0 then "CAP POWER" else tostring(ammo or "--") .. " / " .. component.combat.magazine
             w.sel.Visible = i == selected
         end
-        statusTag(display, "LIVE")
+        widgets.armamentFooter.Text = string.format("%s %s | %.1f u/shot\nMAX %.1f u/s / %.1f heat/s | RELOAD %.1fs / CD %.2fs | HITS %d / %.1f DMG", Telemetry.Value("weapons.mode","SAFE"),Telemetry.Value("weapons.state","SAFE"),Telemetry.Value("weapons.cost",0),Telemetry.Value("weapons.power",0),Telemetry.Value("weapons.heat",0),Telemetry.Value("weapons.reload",0),Telemetry.Value("weapons.cooldown",0),Telemetry.Value("weapons.hits",0),Telemetry.Value("weapons.lastDamage",0))
+        statusTag(display, Telemetry.Get("weapons.state").status)
     end
 end
 
@@ -429,7 +431,7 @@ local function buildOverlay(playerGui: PlayerGui)
     widgets.evacFrame = warn
 
     -- Hint strip
-    widgets.hint = label(overlay, "V  Garage view     R  Recenter     Mouse / Arrows  Look     1-6  Select hardpoint     X  Test ejection     ALT  Free cursor", UDim2.new(0.5, 0, 1, -34), UDim2.fromOffset(1100, 22), { TextSize = 15, TextColor3 = DIM_TEXT, AnchorPoint = Vector2.new(0.5, 0), TextXAlignment = Enum.TextXAlignment.Center })
+    widgets.hint = label(overlay, "V  Garage view     R  Recenter     Mouse / Arrows  Look     LMB Fire  1-6 Hardpoint  T Reload     X  Test ejection     ALT  Free cursor", UDim2.new(0.5, 0, 1, -34), UDim2.fromOffset(1100, 22), { TextSize = 15, TextColor3 = DIM_TEXT, AnchorPoint = Vector2.new(0.5, 0), TextXAlignment = Enum.TextXAlignment.Center })
 
     -- Fade layer (separate gui so it covers everything, including the garage UI)
     local fadeGui = new("ScreenGui", { Name = "IronframeCockpitFade", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 100 }, playerGui)
@@ -591,6 +593,11 @@ end
 
 -- Per-frame cheap animation: compass tape, radar bearing ring and sweep.
 function Hud.Step(dt: number, t: number)
+    if widgets.stab then
+        widgets.stab.Size = UDim2.fromOffset(600,20)
+        widgets.stab.Text = string.format("%s | %s | HITS %d",Telemetry.Value("weapons.name","WEAPONS SAFE"),Telemetry.Value("weapons.state","SAFE"),Telemetry.Value("weapons.hits",0))
+        widgets.stab.TextColor3 = if Telemetry.Value("weapons.state","") == "ENERGY LOW" then AMBER else CYAN
+    end
     if widgets.modeLine then
         widgets.modeLine.Text = string.format("%s  /  %s  %.1f st/s  /  %s", Telemetry.Value("deployment.state", "STOWED"), Telemetry.Value("movement.direction", "STOP"), math.abs(Telemetry.Value("movement.speed", 0)), Telemetry.Value("movement.drive", "IDLE"))
     end

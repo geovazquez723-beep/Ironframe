@@ -843,11 +843,6 @@ function Mode.Start(dependencies)
             elseif code == Enum.KeyCode.LeftAlt then
                 cursorFree = true
                 applyCursor()
-            else
-                local slot = ({ [Enum.KeyCode.One] = 1, [Enum.KeyCode.Two] = 2, [Enum.KeyCode.Three] = 3, [Enum.KeyCode.Four] = 4, [Enum.KeyCode.Five] = 5, [Enum.KeyCode.Six] = 6 })[code]
-                if slot then
-                    Telemetry.Publish("weapons.selected", slot, "LIVE")
-                end
             end
         end
     end)

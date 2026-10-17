@@ -4,6 +4,7 @@
 
 local RigSpec = require(script.Parent.RigSpec)
 
+local Geometry = require(script.Parent.WeaponGeometry)
 local MechRig = {}
 
 local function axisRotation(axis: string?, angle: number): CFrame
@@ -30,7 +31,7 @@ end
 
 export type Rig = {
     model: Model,
-    parts: { { part: BasePart, joint: string, localCF: CFrame } },
+    parts: { { part: BasePart, joint: string, socket: string?, localCF: CFrame } },
     linkParts: { { part: BasePart, link: any, role: string, end_: string, offset: number } },
 }
 
@@ -53,6 +54,7 @@ function MechRig.Bind(model: Model): Rig
                 table.insert(rig.parts, {
                     part = descendant,
                     joint = jointName,
+                    socket = string.match(descendant.Name, "^Weapon_(%a+_%a+)_"),
                     localCF = descendant:GetAttribute("LocalCF") or CFrame.identity,
                 })
             end
@@ -70,7 +72,17 @@ function MechRig.Apply(rig: Rig, rootCF: CFrame, angles: { [string]: number }?):
 
     for _, entry in ipairs(rig.parts) do
         table.insert(partList, entry.part)
-        table.insert(cframes, world[entry.joint] * entry.localCF)
+        local cf = world[entry.joint] * entry.localCF
+        if entry.socket and rig.model:GetAttribute("WeaponSocket") == entry.socket and rig.model:GetAttribute("Deployment") == "ACTIVE" then
+            local aim = rig.model:GetAttribute("WeaponAim")
+            if aim then
+                local localMount = RigSpec.SocketLocalCF(entry.socket)
+                local shotAt = rig.model:GetAttribute("WeaponShotAt") or -100
+                local recoil = math.max(0, 1 - (workspace:GetServerTimeNow() - shotAt) / 0.1) * 0.16
+                cf = Geometry.Mount(world, entry.socket, aim) * CFrame.new(0,0,recoil) * localMount:Inverse() * entry.localCF
+            end
+        end
+        table.insert(cframes, cf)
     end
     for _, entry in ipairs(rig.linkParts) do
         local link = entry.link

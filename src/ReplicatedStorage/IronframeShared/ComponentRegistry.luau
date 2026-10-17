@@ -18,6 +18,10 @@ local ComponentRegistry = {
     W_LASER_RIFLE = {
         name = "LR-12 Laser Rifle", class = "weapon", family = "energy", size = 2,
         mass = 2.1, powerDraw = 8, heatPerSecond = 5, nominalDps = 25,
+        combat = { category = "laser", damage = 25, interval = 0.25, range = 450, energy = 24,
+            heat = 6, mode = "PULSE", magazine = 0, ammoPerShot = 0, reload = 0,
+            hardpoints = { left_arm = true, right_arm = true, left_shoulder = true, right_shoulder = true },
+            muzzle = 6.62, effect = "LASER", sound = "rbxasset://sounds/volume_slider.ogg" },
     },
     W_PLASMA_CANNON = {
         name = "PC-40 Plasma Cannon", class = "weapon", family = "energy", size = 3,
@@ -26,6 +30,10 @@ local ComponentRegistry = {
     W_MACHINE_GUN = {
         name = "MG-9 Machine Gun", class = "weapon", family = "ballistic", size = 2,
         mass = 2.5, powerDraw = 3, heatPerSecond = 1, nominalDps = 22,
+        combat = { category = "ballistic", damage = 8, interval = 0.1, range = 350, energy = 0.6,
+            heat = 0.12, mode = "AUTO", magazine = 60, ammoPerShot = 1, reload = 3,
+            hardpoints = { left_arm = true, right_arm = true, left_shoulder = true, right_shoulder = true },
+            muzzle = 5.67, effect = "BALLISTIC", sound = "rbxasset://sounds/impact_explosion_03.mp3" },
     },
     W_MISSILE_POD = {
         name = "MR-6 Missile Pod", class = "weapon", family = "missile", size = 2,

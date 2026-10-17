@@ -122,6 +122,13 @@ WeaponModules.Meshes = {
 }
 
 function WeaponModules.Build(kit, weaponId, socketName, joint, mountCF, palette)
+    local component = require(game.ReplicatedStorage.IronframeShared.ComponentRegistry)[weaponId]
+    if component and component.combat then
+        local muzzle = kit:box("Weapon_" .. socketName .. "_Emitter", joint, V(0.12,0.12,0.12),
+            mountCF * C(0,0,-component.combat.muzzle), palette.beam, "weapon")
+        muzzle.Transparency = 1
+        muzzle:SetAttribute("WeaponMuzzle", true)
+    end
     local meshSpec = WeaponModules.Meshes[weaponId]
     if meshSpec and kit.useAssets ~= false then
         local placed = kit:mesh({
