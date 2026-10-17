@@ -129,6 +129,20 @@ function WeaponModules.Build(kit, weaponId, socketName, joint, mountCF, palette)
         muzzle.Transparency = 1
         muzzle:SetAttribute("WeaponMuzzle", true)
     end
+    if weaponId == "W_MACHINE_GUN" then
+        local fx = require(game.ReplicatedStorage.IronframeShared.WeaponPresentation).casing
+        local side = if string.sub(socketName,1,4) == "left" then -1 else 1
+        -- The carrier is rigged with the imported/procedural assembly. LookVector points OUT from the receiver.
+        local portCF = mountCF * C(side*fx.portSide,fx.portY,fx.portZ) * CFrame.Angles(0,-side*math.pi/2,0)
+        local carrier = kit:box("Weapon_"..socketName.."_EjectionPort",joint,V(0.12,0.12,0.12),portCF,palette.steel,"weapon")
+        carrier.Transparency = 1
+        local attachment = Instance.new("Attachment")
+        attachment.Name,attachment.Parent = "EjectionPort",carrier
+        -- Small visible bolt / port rim on the receiver, also retained when an imported mesh is used.
+        local bolt = kit:box("Weapon_"..socketName.."_Bolt",joint,V(0.08,0.25,0.52),
+            mountCF*C(side*(fx.portSide-0.08),fx.portY,fx.portZ),palette.steel,"weapon")
+        bolt:SetAttribute("WeaponBolt",true)
+    end
     local meshSpec = WeaponModules.Meshes[weaponId]
     if meshSpec and kit.useAssets ~= false then
         local placed = kit:mesh({

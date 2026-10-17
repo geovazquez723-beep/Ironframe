@@ -5,6 +5,9 @@
 local RigSpec = require(script.Parent.RigSpec)
 
 local Geometry = require(script.Parent.WeaponGeometry)
+local Presentation = require(script.Parent.WeaponPresentation)
+local Motion = require(script.Parent.WeaponMotion)
+local Loadouts = require(script.Parent.Loadouts)
 local MechRig = {}
 
 local function axisRotation(axis: string?, angle: number): CFrame
@@ -31,7 +34,7 @@ end
 
 export type Rig = {
     model: Model,
-    parts: { { part: BasePart, joint: string, socket: string?, localCF: CFrame } },
+    parts: { { part: BasePart, joint: string, socket: string?, bolt: boolean?, localCF: CFrame } },
     linkParts: { { part: BasePart, link: any, role: string, end_: string, offset: number } },
 }
 
@@ -54,6 +57,7 @@ function MechRig.Bind(model: Model): Rig
                 table.insert(rig.parts, {
                     part = descendant,
                     joint = jointName,
+                    bolt = descendant:GetAttribute("WeaponBolt") == true,
                     socket = string.match(descendant.Name, "^Weapon_(%a+_%a+)_"),
                     localCF = descendant:GetAttribute("LocalCF") or CFrame.identity,
                 })
@@ -70,17 +74,26 @@ function MechRig.Apply(rig: Rig, rootCF: CFrame, angles: { [string]: number }?):
     local partList: { BasePart } = table.create(count)
     local cframes: { CFrame } = table.create(count)
 
+    local selected = rig.model:GetAttribute("WeaponSocket")
+    local aim = rig.model:GetAttribute("WeaponAim")
+    local weaponBase, inverseMount, cycle = nil,nil,0
+    if selected and RigSpec.Sockets[selected] and aim and rig.model:GetAttribute("Deployment") == "ACTIVE" then
+        local preset = Loadouts.presets[rig.model:GetAttribute("PresetId")]
+        local spec = preset and Presentation.recoil[preset.mounts[selected]]
+        local shotAt = rig.model:GetAttribute("WeaponShotAt") or -100
+        local visualSocket = rig.model:GetAttribute("WeaponVisualSocket")
+        if visualSocket then shotAt = if visualSocket == selected then rig.model:GetAttribute("WeaponVisualShotAt") or shotAt else -100 end
+        local amount = if spec then Motion.Recoil(workspace:GetServerTimeNow() - shotAt,spec) else 0
+        local distance = spec and spec.distance*amount or 0
+        cycle = spec and spec.cycle*amount or 0
+        weaponBase = Geometry.Mount(world, selected, aim) * CFrame.new(0,0,distance) * CFrame.Angles(spec and spec.pitch*amount or 0,0,0)
+        inverseMount = RigSpec.SocketLocalCF(selected):Inverse()
+    end
     for _, entry in ipairs(rig.parts) do
         table.insert(partList, entry.part)
         local cf = world[entry.joint] * entry.localCF
-        if entry.socket and rig.model:GetAttribute("WeaponSocket") == entry.socket and rig.model:GetAttribute("Deployment") == "ACTIVE" then
-            local aim = rig.model:GetAttribute("WeaponAim")
-            if aim then
-                local localMount = RigSpec.SocketLocalCF(entry.socket)
-                local shotAt = rig.model:GetAttribute("WeaponShotAt") or -100
-                local recoil = math.max(0, 1 - (workspace:GetServerTimeNow() - shotAt) / 0.1) * 0.16
-                cf = Geometry.Mount(world, entry.socket, aim) * CFrame.new(0,0,recoil) * localMount:Inverse() * entry.localCF
-            end
+        if weaponBase and entry.socket == selected then
+            cf = weaponBase * CFrame.new(0,0,if entry.bolt then cycle else 0) * inverseMount * entry.localCF
         end
         table.insert(cframes, cf)
     end

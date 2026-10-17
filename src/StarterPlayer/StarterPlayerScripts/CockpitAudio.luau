@@ -111,6 +111,11 @@ function Audio.SetCockpit(amount: number)
     cockpitMix = amount
 end
 
+-- Weapon audio reads the same perspective mix as the atmosphere; no separate camera state.
+function Audio.CockpitMix(): number
+    return cockpitMix
+end
+
 -- 0 = reactor cold, 1 = nominal idle. Driven by the boot sequence.
 function Audio.SetSpool(amount: number)
     spool = amount

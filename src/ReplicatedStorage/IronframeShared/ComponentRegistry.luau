@@ -21,7 +21,7 @@ local ComponentRegistry = {
         combat = { category = "laser", damage = 25, interval = 0.25, range = 450, energy = 24,
             heat = 6, mode = "PULSE", magazine = 0, ammoPerShot = 0, reload = 0,
             hardpoints = { left_arm = true, right_arm = true, left_shoulder = true, right_shoulder = true },
-            muzzle = 6.62, effect = "LASER", sound = "rbxasset://sounds/volume_slider.ogg" },
+            muzzle = 6.62, effect = "LASER" },
     },
     W_PLASMA_CANNON = {
         name = "PC-40 Plasma Cannon", class = "weapon", family = "energy", size = 3,
@@ -33,7 +33,7 @@ local ComponentRegistry = {
         combat = { category = "ballistic", damage = 8, interval = 0.1, range = 350, energy = 0.6,
             heat = 0.12, mode = "AUTO", magazine = 60, ammoPerShot = 1, reload = 3,
             hardpoints = { left_arm = true, right_arm = true, left_shoulder = true, right_shoulder = true },
-            muzzle = 5.67, effect = "BALLISTIC", sound = "rbxasset://sounds/impact_explosion_03.mp3" },
+            muzzle = 5.67, effect = "BALLISTIC" },
     },
     W_MISSILE_POD = {
         name = "MR-6 Missile Pod", class = "weapon", family = "missile", size = 2,

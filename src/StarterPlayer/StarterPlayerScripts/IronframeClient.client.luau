@@ -141,4 +141,4 @@ require(script.Parent.BayClient).Start()
 require(script.Parent.DeploymentClient).Start(remotes, CockpitMode, ShowroomAnimator)
 require(script.Parent.ShieldClient).Start(ShowroomAnimator)
 
-require(script.Parent.WeaponClient).Start(remotes, CockpitMode)
+require(script.Parent.WeaponClient).Start(remotes, CockpitMode, ShowroomAnimator)
