@@ -18,6 +18,8 @@ local Weapons = require(script.Parent.Weapons)
 local CombatTargets = require(script.Parent.CombatTargets)
 local Destructibles = require(script.Parent.Destructibles)
 local RangeControl = require(script.Parent.RangeControl)
+local TankCombat = require(script.Parent.TankCombat) -- M10B
+local BastionDamage = require(script.Parent.BastionDamage) -- M10B
 local sessions = {}
 local selfTestResult = { passed = 0, total = 0, failed = {} }
 local bayCounter = 0
@@ -46,6 +48,8 @@ local WeaponIntent = remote("RemoteEvent", "WeaponIntent")
 local WeaponEffects = remote("RemoteEvent", "WeaponEffects")
 local DestructionFx = remote("RemoteEvent", "DestructionFx") -- M10A: batched cosmetic destruction events (server -> owner)
 local RequestRangeReset = remote("RemoteEvent", "RequestRangeReset") -- M10A: "ALL" | "VEHICLES" | "STRUCTURES"
+local CombatFx = remote("RemoteEvent", "CombatFx") -- M10B: server -> owner, arrays of cosmetic shell events (fire / end)
+local RequestCombatMode = remote("RemoteEvent", "RequestCombatMode") -- M10B: "PASSIVE" | "ACTIVE" (allow-listed, validated)
 
 local function validatePresets()
     local count = 0
@@ -129,6 +133,7 @@ local function assemble(player)
     session.machineState = "OPERATIONAL"
     session.power = EnergySystems.Create(model, Compiler.Compile(session.loadout).energy)
     Weapons.Create(session)
+    BastionDamage.Create(session) -- fresh, fully repaired components for every assembly
     EnergySystems.Publish(session.power, true)
     setDeploymentAttributes(session)
     StateChanged:FireClient(player, publicState(player, "Loadout installed"))
@@ -136,6 +141,7 @@ local function assemble(player)
 end
 
 RangeControl.Init(DestructionFx, RequestRangeReset, sessions)
+TankCombat.Init({ sessions = sessions, fx = CombatFx })
 WorldBuilder.Initialize()
 validatePresets()
 selfTestResult = SelfTest.Run()
@@ -161,11 +167,14 @@ SetPreset.OnServerEvent:Connect(function(player, presetId)
     assemble(player)
 end)
 
-RequestTestEject.OnServerEvent:Connect(function(player)
-    local session = sessions[player]
+-- Runs the existing guaranteed-safe ejection sequence. `forced` marks a combat core failure (M10B) instead of the manual test
+-- request: it skips the manual rate limit and keeps the abandoned machine standing about a second longer, so its terminal
+-- shutdown (sparks, smoke, lights failing, final burst) is actually seen before it is removed.
+local function runEjection(player, session, forced)
     if not session or session.machineState ~= "OPERATIONAL" or not session.mech then return end
-    if os.clock() - session.lastEject < 8 then return end
     session.lastEject = os.clock()
+    local extra = if forced then 1.2 else 0
+    local delayFn = function(seconds, fn) return task.delay(seconds + extra, fn) end
 
     local pod
     -- SAFETY INVARIANT (enforced inside Ejection.Run): pilotSafe is set before any hook below runs.
@@ -213,6 +222,12 @@ RequestTestEject.OnServerEvent:Connect(function(player)
             print(string.format("[IF-STEP-04] Guaranteed safe ejection for userId %d", player.UserId))
         end,
         onMechDisabled = function()
+            -- The abandoned machine goes out with a final burst where it stood (cosmetic, owner only).
+            local district = session.bay and Destructibles.Get(session.bay)
+            if district and session.controller then
+                local at = Locomotion.Position(session.controller) + Vector3.new(0, 9, 0)
+                Destructibles.Emit(district, { t = "x", f = "machine", k = "explosion", cf = CFrame.new(at), s = Vector3.new(12, 10, 12), c = Color3.fromRGB(70, 70, 70), mat = Enum.Material.Metal, e = 2.4 }, true)
+            end
             if session.controller then
                 Locomotion.Destroy(session.controller)
                 session.controller = nil
@@ -232,7 +247,33 @@ RequestTestEject.OnServerEvent:Connect(function(player)
         isStale = function()
             return sessions[player] ~= session
         end,
-    })
+    }, delayFn)
+end
+
+RequestTestEject.OnServerEvent:Connect(function(player)
+    local session = sessions[player]
+    if not session or session.machineState ~= "OPERATIONAL" or not session.mech then return end
+    if os.clock() - session.lastEject < 8 then return end
+    runEjection(player, session, false)
+end)
+
+-- M10B: core failure on the Bastion is answered by the same guaranteed-safe ejection. It never depends on pilot state (there is none).
+BastionDamage.onCoreFailure = function(session)
+    if session.player and sessions[session.player] == session then
+        runEjection(session.player, session, true)
+    end
+end
+
+RequestCombatMode.OnServerEvent:Connect(function(player, mode)
+    local session = sessions[player]
+    if not session or type(mode) ~= "string" or (mode ~= "PASSIVE" and mode ~= "ACTIVE") then return end
+    if session.deployment ~= "ACTIVE" or session.machineState ~= "OPERATIONAL" or not session.bay then return end
+    if os.clock() - (session.lastCombatMode or -100) < 0.4 then return end
+    session.lastCombatMode = os.clock()
+    local district = Destructibles.Get(session.bay)
+    if district then
+        TankCombat.SetMode(district, mode, "pilot request")
+    end
 end)
 
 -- ---------------------------------------------------------------------------------------------------------------------
@@ -249,6 +290,7 @@ local function finishDock(player, session)
         session.controller = nil
     end
     if Deployment.Transition(session, "STOWED") then
+        BastionDamage.Repair(session) -- the hangar rebuilds every component between sorties
         session.deployAt, session.recallAt, session.dockUntil = nil, nil, nil
         BayControl.SetDoors(session.bay, false)
         session.mech:SetAttribute("DockMode", nil)
@@ -273,6 +315,7 @@ RequestDeploy.OnServerEvent:Connect(function(player)
     session.controller = Locomotion.Create(session.mech, session.mech:GetAttribute("ChassisId"), session.bayPosition, 0)
     session.controller.energySystems = session.power
     EnergySystems.ResetProfile(session.power)
+    BastionDamage.Apply(session)
     session.deployAt = os.clock() + math.max(Deployment.STARTUP_TIME, BayControl.DOOR_TIME)
     BayControl.SetDoors(session.bay, true)
     setDeploymentAttributes(session)
@@ -383,6 +426,7 @@ RunService.Heartbeat:Connect(function(dt)
     for _, session in pairs(sessions) do Weapons.Step(session,WeaponEffects) end
     CombatTargets.Step(os.clock())
     Destructibles.Step(os.clock(), dt)
+    TankCombat.Step(os.clock(), dt)
     RangeControl.Step()
     driveStats.active = active
     if active > 0 then
@@ -396,6 +440,7 @@ local function playerAdded(player)
     local position, bay = WorldBuilder.BuildBay(bayCounter)
     RangeControl.Attach(player, bay)
     sessions[player] = {
+        player = player,
         bayPosition = position,
         bay = bay,
         deployment = "STOWED",

@@ -46,7 +46,10 @@ function Weapons.Step(session, effects)
     if not live or now - s.lastInput > 0.35 then s.held = false end
     local socket = RigSpec.SocketOrder[s.selected]
     local slot = s.slots[socket]
+    -- M10B: a mount whose weapon assembly has failed is offline (BastionDamage keeps session.damageFx current).
+    local disabled = slot ~= nil and session.damageFx ~= nil and session.damageFx.sockets[socket] == true
     model:SetAttribute("WeaponSocket",socket)
+    model:SetAttribute("WeaponDisabled",disabled)
     local aimValid, origin, direction = false,nil,nil
     if live and slot and s.aim then
         local c = session.controller
@@ -54,7 +57,7 @@ function Weapons.Step(session, effects)
         local world = Rig.Solve(root)
         local mount = Geometry.Mount(world,socket,nil)
         local delta = s.aim - mount.Position
-        aimValid = delta.Magnitude > slot.spec.muzzle + 1 and delta.Magnitude < 2000
+        aimValid = not disabled and delta.Magnitude > slot.spec.muzzle + 1 and delta.Magnitude < 2000
             and delta.Unit:Dot(root.LookVector) >= math.cos(math.rad(65))
         if aimValid then
             local aimed = Geometry.Mount(world,socket,s.aim)
@@ -68,6 +71,7 @@ function Weapons.Step(session, effects)
             if workspace:Raycast(mount.Position,origin-mount.Position,params) then aimValid = false end
         else model:SetAttribute("WeaponAim",nil) end
     end
+    if disabled then s.held = false end
     if s.held then
         local fired = State.Fire(s,socket,now,live,aimValid,function(cost,heat)
             local e = session.power.energy
@@ -95,6 +99,7 @@ function Weapons.Step(session, effects)
         end
         if s.reason == "ENERGY LOW" and s.reserved then s.reason = "RESERVED" end
     else s.reason = if not live then "SAFE" elseif not slot then "UNAVAILABLE" elseif slot.reloadAt then "RELOADING" elseif now < slot.nextShot then "COOLDOWN" else "READY" end
+    if disabled then s.reason = "DISABLED" end
     if now-s.publishAt < 0.1 then return end
     s.publishAt = now
     local spec = slot and slot.spec

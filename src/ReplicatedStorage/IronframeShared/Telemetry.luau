@@ -72,6 +72,8 @@ Telemetry.Keys = {
     "energy.profile", "energy.profilePending", "energy.profileEta", "energy.profileSerial", "energy.profileReason", "energy.focus",
     "energy.limited", "energy.weaponRate", "energy.shieldDemand", "energy.sprintDemand",
     "shield.state", "shield.cooldown", "shield.integrity", "shield.reason", "shield.timing",
+    -- M10B: active tank combat and Bastion component damage (published by CombatHud from authoritative server attributes)
+    "damage.regions", "damage.speed", "damage.reactor", "damage.disabled", "combat.threat", "combat.targets", "combat.lastHit",
 }
 
 return Telemetry

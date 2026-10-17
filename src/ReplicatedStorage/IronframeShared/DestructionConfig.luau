@@ -11,6 +11,7 @@ Config.weaponClassById = {
     W_MACHINE_GUN = "MG",
     W_LASER_RIFLE = "LASER",
     W_HMG_MAULER = "HEAVY",
+    TANK_CANNON = "HEAVY", -- M10B: unmanned tank shells break cover like the Mauler does (CombatConfig.shellWeaponId)
 }
 
 -- Unknown ballistic/energy weapons (future content) still resolve: by category, and heavy ballistic by per-hit damage.

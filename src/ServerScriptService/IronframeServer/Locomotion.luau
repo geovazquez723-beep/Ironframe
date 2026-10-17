@@ -32,6 +32,7 @@ export type Controller = {
     stats: { stepMs: number, steps: number },
     lastCF: CFrame,
     energySystems: any?,
+    mobility: { speed: number, turn: number }?,
 }
 
 local rayParams = RaycastParams.new()
@@ -218,6 +219,15 @@ function Locomotion.Teleport(c: Controller, position: Vector3, yaw: number)
     s.speed, s.yawRate, s.accel, s.pitch, s.roll = 0, 0, 0, 0, 0
 end
 
+-- Leg damage (M10B): drive performance multipliers applied on top of the energy economy. 1,1 clears the penalty.
+function Locomotion.SetMobility(c: Controller, speed: number, turn: number)
+    if speed >= 0.999 and turn >= 0.999 then
+        c.mobility = nil
+    else
+        c.mobility = { speed = math.clamp(speed, 0.1, 1), turn = math.clamp(turn, 0.1, 1) }
+    end
+end
+
 function Locomotion.SetAutopilot(c: Controller, target: { x: number, z: number, yaw: number }?)
     c.autopilot = target
 end
@@ -250,6 +260,11 @@ function Locomotion.Step(c: Controller, dt: number): ({ [string]: any }, boolean
     elseif os.clock() - c.lastInput > Locomotion.INPUT_TIMEOUT then
         throttle, steer = 0, 0
     end
+    local mob = c.mobility
+    if mob then
+        steer *= mob.turn
+    end
+    local ms = if mob then mob.speed else 1
     local events = {}
     local elapsed = math.clamp(dt, 0, 0.25)
     local steps = math.max(1, math.ceil(elapsed * 60))
@@ -263,8 +278,8 @@ function Locomotion.Step(c: Controller, dt: number): ({ [string]: any }, boolean
         end
         local balance = c.energySystems and c.energySystems.config.movement
         local e = Drive.Advance(s, { throttle = throttle, steer = steer, locked = input.locked and not c.autopilot,
-            baseScale = base, speedScale = base * (1 + boost * (balance and balance.sprintMultiplier - 1 or 0)),
-            accelScale = base * (1 + boost * (balance and balance.sprintAcceleration - 1 or 0)),
+            baseScale = base * ms, speedScale = base * ms * (1 + boost * ms * (balance and balance.sprintMultiplier - 1 or 0)),
+            accelScale = base * ms * (1 + boost * ms * (balance and balance.sprintAcceleration - 1 or 0)),
         }, h, c.params, c.params2)
         if e.bump then events.bump = math.max(events.bump or 0, e.bump) end
         if e.turnBlocked then events.turnBlocked = true end

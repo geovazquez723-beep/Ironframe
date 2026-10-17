@@ -1,6 +1,7 @@
--- Unmanned armored training tank (M10A). A reusable machine target: five damageable components, deterministic hit geometry,
--- a staged damage presentation and (optionally) a predefined patrol route. No crew, no weapons fire, no AI beyond "follow the
--- route and wait for a mech to clear the lane".
+-- Unmanned armored training tank (M10A, armed in M10B). A reusable machine: five damageable components, deterministic hit geometry,
+-- a staged damage presentation and (optionally) a predefined patrol route. No crew. M10A: no weapons fire, no AI beyond "follow the
+-- route and wait for a mech to clear the lane". M10B: spec.archetype (SENTRY / PATROL / HEAVY) adds a TankBrain state machine;
+-- TankCombat drives it (turret, hull, muzzle) through the small API at the bottom of this file.
 --
 -- Component  -> parts that carry its hit geometry (queryable)        -> what its loss does
 --   HULL       lower/upper hull, glacis, rear plate                    -> VEHICLE DESTROYED (everything stops, turret thrown off)
@@ -15,6 +16,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("IronframeShared")
 local Unit = require(Shared:WaitForChild("DestructibleState"))
 local Rules = require(Shared:WaitForChild("ComponentRules"))
+local Brain = require(Shared:WaitForChild("TankBrain"))
+local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
+local DestructionConfig = require(Shared:WaitForChild("DestructionConfig"))
+local Math = require(Shared:WaitForChild("CombatMath"))
 local Destructibles = require(script.Parent.Destructibles)
 local AssetLibrary = require(script.Parent.AssetLibrary)
 
@@ -210,6 +215,7 @@ local function buildProcedural(b, tank)
     cylZ(b, "BoreEvacuator", 3.2, 1.3, CF(0, 1.7, -11.0), Color3.fromRGB(52, 54, 56), METAL, { parent = turretRoot, comp = "TURRET" })
     local brake = cylZ(b, "MuzzleBrake", 1.5, 1.45, CF(0, 1.7, -21.2), Color3.fromRGB(34, 36, 38), METAL, { parent = turretRoot, comp = "TURRET", query = true })
     b.barrel, b.brake = barrel, brake
+    b.muzzleLocal = CF(0, 1.7, -22.2) -- just past the muzzle brake, turret-root frame
     cylX(b, "Cupola", 0.9, 2.5, CF(2.2, 3.9, 2.0) * ANG(0, 0, math.pi / 2), trim, METAL, { parent = turretRoot, comp = "TURRET" })
     t("Hatch", V3(1.8, 0.35, 1.8), CF(-2.0, 3.6, 2.4), steel, METAL, { cast = false })
     t("SightBox", V3(1.3, 1.1, 1.6), CF(-2.4, 3.55, -2.4), Color3.fromRGB(34, 36, 38), METAL, { cast = false })
@@ -305,6 +311,7 @@ local function buildSkinned(b, tank, template: Model): boolean
     skinPart(b, meshes.turret, CF(meshCenter - SKIN_PIVOT), "TURRET", turretRoot)
     hitbox("TurretHit", V3(11.5, 5.4, 15.5), CF(0, 2.6, 0), "TURRET", turretRoot)
     b.barrel = hitbox("BarrelHit", V3(1.8, 1.8, 8.6), CF(0, 2.8, -10.9), "TURRET", turretRoot)
+    b.muzzleLocal = CF(0, 2.8, -15.6) -- just past the end of the barrel box, turret-root frame
     plate(b, tank, tank.id, V3(2.6, 1.3, 0.2), CF(-6.5, 2.4, 1.6) * ANG(0, math.rad(90), 0), turretRoot, Enum.NormalId.Front)
     plate(b, tank, tank.id, V3(2.6, 1.3, 0.2), CF(6.5, 2.4, 1.6) * ANG(0, math.rad(-90), 0), turretRoot, Enum.NormalId.Front)
     b.beacon = add(b, "TrainingBeacon", V3(0.9, 0.9, 0.9), CF(0, 9.4, 9.5), Color3.fromRGB(255, 168, 58), Enum.Material.Neon, { comp = "HULL", cast = false })
@@ -568,6 +575,25 @@ local function laneBlocked(tank): boolean
     return hit ~= nil
 end
 
+-- Drives the hull toward `target` (turn first, then advance). Shared by the patrol route and combat repositioning.
+local function steer(tank, target: Vector3, speed: number, turnRate: number, dt: number): number
+    local position = tank.position
+    local delta = Vector3.new(target.X - position.X, 0, target.Z - position.Z)
+    local distance = delta.Magnitude
+    if distance < 0.05 then
+        return distance
+    end
+    local desired = math.atan2(-delta.X, -delta.Z)
+    local diff = Math.wrap(desired - tank.yaw)
+    local maxTurn = turnRate * dt
+    tank.yaw += math.clamp(diff, -maxTurn, maxTurn)
+    if math.abs(diff) <= math.rad(2.5) then
+        tank.position = position + delta.Unit * math.min(speed * dt, distance)
+    end
+    tank.build.root.CFrame = CF(tank.position) * ANG(0, tank.yaw, 0)
+    return distance
+end
+
 local function update(d, tank, dt: number, t: number)
     local status = tank.status
     local b = tank.build
@@ -576,12 +602,14 @@ local function update(d, tank, dt: number, t: number)
     end
     -- Dust follows motion; both emitters toggle only on change.
     local moving = false
-    if status.mobile and tank.patrol and not d.resetting then
+    local combat = tank.control == "combat"
+    if combat then
+        moving = tank.combatMoving == true
+    elseif status.mobile and tank.patrol and not d.resetting then
         local points = tank.patrol.points
         local target = points[tank.patrol.index]
         local position = tank.position
-        local delta = Vector3.new(target.X - position.X, 0, target.Z - position.Z)
-        local distance = delta.Magnitude
+        local distance = Vector3.new(target.X - position.X, 0, target.Z - position.Z).Magnitude
         if distance < 1.5 then
             tank.patrol.index += tank.patrol.step
             if tank.patrol.index > #points or tank.patrol.index < 1 then
@@ -589,19 +617,8 @@ local function update(d, tank, dt: number, t: number)
                 tank.patrol.index += 2 * tank.patrol.step
             end
         elseif not laneBlocked(tank) then
-            local desired = math.atan2(-delta.X, -delta.Z)
-            local diff = (desired - tank.yaw + math.pi) % (2 * math.pi) - math.pi
-            local maxTurn = tank.patrol.turnRate * dt
-            if math.abs(diff) > math.rad(2.5) then
-                tank.yaw += math.clamp(diff, -maxTurn, maxTurn)
-                moving = true
-            else
-                tank.yaw += math.clamp(diff, -maxTurn, maxTurn)
-                local step = math.min(tank.patrol.speed * dt, distance)
-                tank.position = position + delta.Unit * step
-                moving = true
-            end
-            b.root.CFrame = CF(tank.position) * ANG(0, tank.yaw, 0)
+            steer(tank, target, tank.patrol.speed, tank.patrol.turnRate, dt)
+            moving = true
         end
     end
     if moving ~= tank.moving then
@@ -610,10 +627,13 @@ local function update(d, tank, dt: number, t: number)
             host.Enabled = moving
         end
     end
-    -- Slow turret scan while the turret is operational (one weld offset at ~10 Hz).
-    if tank.scan and status.turretOperational and t - tank.scanAt >= 0.1 then
+    -- Slow turret scan while the turret is operational (one weld offset at ~10 Hz). After combat the turret slews back onto the
+    -- scan sweep instead of snapping to it.
+    if not combat and tank.scan and status.turretOperational and t - tank.scanAt >= 0.1 then
+        local elapsed = math.min(t - tank.scanAt, 0.5)
         tank.scanAt = t
-        tank.turretYaw = math.sin(t * tank.scanRate + tank.scanPhase) * math.rad(34) + tank.turretBias
+        local want = math.sin(t * tank.scanRate + tank.scanPhase) * math.rad(34) + tank.turretBias
+        tank.turretYaw += math.clamp(Math.wrap(want - tank.turretYaw), -math.rad(45) * elapsed, math.rad(45) * elapsed)
         b.turretWeld.C0 = b.turretBase * ANG(0, tank.turretYaw, 0)
     end
 end
@@ -646,12 +666,17 @@ local function construct(d, tank)
     tank.build, tank.model, tank.root = b, b.model, b.root
     buildGeometry(b, tank)
     dustEmitters(b)
+    local arch = tank.arch
+    local function armoredUnit(name: string, material: string)
+        local scale = arch and arch.hp and arch.hp[name]
+        return Unit.New({ material = material, hp = if scale then DestructionConfig.materials[material].hp * scale else nil })
+    end
     tank.units = {
-        HULL = Unit.New({ material = "VEHICLE_HULL" }),
-        TURRET = Unit.New({ material = "VEHICLE_TURRET" }),
-        TRACK_L = Unit.New({ material = "VEHICLE_TRACK" }),
-        TRACK_R = Unit.New({ material = "VEHICLE_TRACK" }),
-        ENGINE = Unit.New({ material = "VEHICLE_ENGINE" }),
+        HULL = armoredUnit("HULL", "VEHICLE_HULL"),
+        TURRET = armoredUnit("TURRET", "VEHICLE_TURRET"),
+        TRACK_L = armoredUnit("TRACK_L", "VEHICLE_TRACK"),
+        TRACK_R = armoredUnit("TRACK_R", "VEHICLE_TRACK"),
+        ENGINE = armoredUnit("ENGINE", "VEHICLE_ENGINE"),
     }
     tank.comps = {}
     for name, unit in pairs(tank.units) do
@@ -667,6 +692,15 @@ local function construct(d, tank)
     tank.scan = tank.scanRate > 0
     tank.scanAt = 0
     tank.moving = false
+    tank.control, tank.combatMoving, tank.recoilAt, tank.repoTarget = "idle", false, nil, nil
+    if arch then
+        -- A rebuilt tank starts with a fresh brain: AI state is part of what a range reset restores.
+        tank.ai = Brain.New(arch)
+        tank.losClear, tank.aimPoint, tank.losAt = false, nil, -100
+        b.model:SetAttribute("AiType", arch.id)
+        b.model:SetAttribute("AiState", "IDLE")
+        b.turretRoot:SetAttribute("MuzzleLocal", b.muzzleLocal)
+    end
     if tank.patrol then
         tank.patrol.index, tank.patrol.step = 1, 1
     end
@@ -690,7 +724,8 @@ end
 -- patrol? { points = {Vector3...}, speed, turnRate }
 function TrainingTank.Create(d, spec)
     local tank = {
-        kind = "vehicle", id = spec.id, spawnCF = spec.cf, palette = TrainingTank.PALETTES[spec.palette or "OLIVE"],
+        kind = "vehicle", id = spec.id, archetype = spec.archetype, arch = spec.archetype and CombatConfig.archetypes[spec.archetype],
+        spawnCF = spec.cf, palette = TrainingTank.PALETTES[spec.palette or "OLIVE"],
         turretBias = math.rad(spec.turretYaw or 0), scanRate = spec.scan or 0, scanPhase = math.random() * 6,
         patrol = if spec.patrol then { points = spec.patrol.points, speed = spec.patrol.speed or 5, turnRate = spec.patrol.turnRate or math.rad(22), index = 1, step = 1 } else nil,
         onStage = onStage, onHit = function(_, tank, comp, position, normal, class) mark(tank, comp, position, normal, class) end,
@@ -702,6 +737,33 @@ function TrainingTank.Create(d, spec)
     d.totals.vehicles += 1
     d.totals.targets += 1
     return tank
+end
+
+-- Combat API (M10B) -----------------------------------------------------------------------------------------------------
+-- World pose of the muzzle: derived from the hull root and the turret weld offset (never from replicated part positions, so it is
+-- exact on the frame the weld was written).
+function TrainingTank.Muzzle(tank): CFrame
+    local b = tank.build
+    return b.root.CFrame * b.turretWeld.C0 * b.muzzleLocal
+end
+
+-- Writes the turret yaw (relative to the hull) plus an optional recoil kick (studs rearward along the barrel).
+function TrainingTank.SetTurret(tank, yaw: number, recoil: number?)
+    local b = tank.build
+    tank.turretYaw = yaw
+    b.turretWeld.C0 = b.turretBase * ANG(0, yaw, 0) * CF(0, 0, recoil or 0)
+end
+
+function TrainingTank.Steer(tank, target: Vector3, speed: number, turnRate: number, dt: number): number
+    return steer(tank, target, speed, turnRate, dt)
+end
+
+-- Turns the hull in place toward a world heading; returns the remaining error in radians.
+function TrainingTank.Pivot(tank, heading: number, rate: number, dt: number): number
+    local diff = Math.wrap(heading - tank.yaw)
+    tank.yaw += math.clamp(diff, -rate * dt, rate * dt)
+    tank.build.root.CFrame = CF(tank.position) * ANG(0, tank.yaw, 0)
+    return Math.wrap(heading - tank.yaw)
 end
 
 function TrainingTank.Describe(tank)

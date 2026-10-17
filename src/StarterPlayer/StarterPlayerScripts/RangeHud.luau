@@ -31,7 +31,7 @@ function Hud.Start(remotes, cameraMode)
 
     local panel = Instance.new("Frame")
     panel.Name = "RangePanel"
-    panel.Size, panel.Position = UDim2.fromOffset(318, 322), UDim2.fromOffset(22, 96)
+    panel.Size, panel.Position = UDim2.fromOffset(318, 472), UDim2.fromOffset(22, 96)
     panel.BackgroundColor3, panel.BackgroundTransparency, panel.BorderSizePixel = PANEL, 0.12, 0
     panel.Visible = false
     panel.Parent = gui
@@ -72,8 +72,26 @@ function Hud.Start(remotes, cameraMode)
     button("RESET ENTIRE DISTRICT", 192, "ALL")
     button("REPAIR + RESPAWN VEHICLES", 226, "VEHICLES")
     button("RESTORE STRUCTURES", 260, "STRUCTURES")
-    hint.Position = UDim2.fromOffset(9, 296)
-    panel.Size = UDim2.fromOffset(318, 322)
+
+    -- M10B combat training: mode toggle, incoming-fire statistics and the status of each hostile tank.
+    local combatTitle = label("CombatTitle", "COMBAT TRAINING", 304, 20, AMBER, 14)
+    local modeButton = Instance.new("TextButton")
+    modeButton.Name, modeButton.Size, modeButton.Position = "CombatMode", UDim2.fromOffset(300, 32), UDim2.fromOffset(9, 326)
+    modeButton.BackgroundColor3, modeButton.TextColor3, modeButton.Font, modeButton.TextSize = Color3.fromRGB(22, 37, 46), CYAN, Enum.Font.GothamBold, 13
+    modeButton.AutoButtonColor = true
+    modeButton.Parent = panel
+    local modeStroke = Instance.new("UIStroke")
+    modeStroke.Color, modeStroke.Thickness = Color3.fromRGB(70, 110, 124), 1.2
+    modeStroke.Parent = modeButton
+    local currentMode = "PASSIVE"
+    modeButton.MouseButton1Click:Connect(function()
+        remotes.RequestCombatMode:FireServer(if currentMode == "ACTIVE" then "PASSIVE" else "ACTIVE")
+    end)
+    local incoming = label("Incoming", "", 364, 36, CYAN, 13)
+    local hostiles = label("Hostiles", "", 402, 52, CYAN, 13)
+    hint.Position = UDim2.fromOffset(9, 452)
+    hint.Text = "B  RESET ALL   |   N  TRAINING MODE   |   ALT: cursor"
+    panel.Size = UDim2.fromOffset(318, 476)
 
     -- Notices (toast stack, top centre): TARGET DISABLED, VEHICLE DESTROYED, WALL BREACHED ...
     local toastFrame = Instance.new("Frame")
@@ -159,6 +177,22 @@ function Hud.Start(remotes, cameraMode)
         targets.Text = string.format("TARGETS DISABLED  %d / %d\nVEHICLES DESTROYED %d / %d | COMPONENTS LOST %d", a("StatTargetsDisabled"), a("StatTargetsTotal"), a("StatVehiclesDestroyed"), a("StatVehiclesTotal"), a("StatComponentsLost"))
         structures.Text = string.format("STRUCTURE SECTIONS  %d / %d\nWALLS BREACHED %d / %d | COLLAPSES %d", a("StatSections"), a("StatSectionsTotal"), a("StatWallsBreached"), a("StatWallsTotal"), a("StatCollapses"))
         stroke.Color = if district:GetAttribute("StatResetting") then AMBER else Color3.fromRGB(70, 110, 124)
+        -- Combat training state (server-published district attributes)
+        currentMode = district:GetAttribute("CombatMode") or "PASSIVE"
+        local armed = district:GetAttribute("CombatArmed") == true
+        modeButton.Text = if currentMode == "ACTIVE" then (if armed then "ACTIVE TRAINING  -  TANKS ARMED" else "ACTIVE TRAINING  -  ARMING...") else "PASSIVE RANGE  -  TANKS HOLD FIRE"
+        modeButton.TextColor3 = if currentMode == "ACTIVE" then Color3.fromRGB(255, 120, 96) else CYAN
+        modeStroke.Color = if currentMode == "ACTIVE" then Color3.fromRGB(190, 70, 56) else Color3.fromRGB(70, 110, 124)
+        combatTitle.Text = if currentMode == "ACTIVE" then "COMBAT TRAINING  /  LIVE FIRE" else "COMBAT TRAINING  /  SAFE"
+        incoming.Text = string.format("SHELLS %d | HITS %d | PERFECT %d GUARD %d\nUNSHIELDED %d | OFF-AXIS %d", a("CombatShots"), a("CombatMechHits"), a("CombatPerfect"), a("CombatGuard"), a("CombatUnshielded"), a("CombatOffAxis"))
+        local lines = {}
+        for _, model in ipairs(district:GetChildren()) do
+            if model:IsA("Model") and model:GetAttribute("AiType") then
+                table.insert(lines, string.format("%s %-6s %-10s %s", model:GetAttribute("VehicleId"), model:GetAttribute("AiType"), model:GetAttribute("AiState") or "-", model:GetAttribute("Status") or ""))
+            end
+        end
+        table.sort(lines)
+        hostiles.Text = table.concat(lines, "\n")
     end)
 
     UIS.InputBegan:Connect(function(input, processed)
@@ -167,6 +201,8 @@ function Hud.Start(remotes, cameraMode)
         end
         if input.KeyCode == Enum.KeyCode.B and panel.Visible then
             remotes.RequestRangeReset:FireServer("ALL")
+        elseif input.KeyCode == Enum.KeyCode.N and panel.Visible then
+            remotes.RequestCombatMode:FireServer(if currentMode == "ACTIVE" then "PASSIVE" else "ACTIVE")
         end
     end)
 
@@ -176,7 +212,10 @@ function Hud.Start(remotes, cameraMode)
         if command == "reset" then
             remotes.RequestRangeReset:FireServer(kind or "ALL")
         elseif command == "state" then
-            return { visible = panel.Visible, damage = damage.Text, targets = targets.Text, structures = structures.Text, toasts = #toasts }
+            return { visible = panel.Visible, damage = damage.Text, targets = targets.Text, structures = structures.Text, toasts = #toasts,
+                mode = currentMode, modeText = modeButton.Text, incoming = incoming.Text, hostiles = hostiles.Text }
+        elseif command == "mode" then
+            remotes.RequestCombatMode:FireServer(kind)
         end
         return nil
     end

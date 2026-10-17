@@ -497,10 +497,10 @@ end
 local function trainingMachines(ctx)
     local d = ctx.d
     local at = function(x, z) return ctx.origin + V3(x, 0, z) end
-    TrainingTank.Create(d, { id = "T-01", cf = CF(at(-38, 438)), palette = "OLIVE", turretYaw = 24, scan = 0 })
-    TrainingTank.Create(d, { id = "T-02", cf = CF(at(14, 478)), palette = "SAND", turretYaw = -18, scan = 0 })
+    TrainingTank.Create(d, { id = "T-01", cf = CF(at(-38, 438)), palette = "OLIVE", turretYaw = 24, scan = 0, archetype = "SENTRY" })
+    TrainingTank.Create(d, { id = "T-02", cf = CF(at(14, 478)), palette = "SAND", turretYaw = -18, scan = 0, archetype = "HEAVY" })
     TrainingTank.Create(d, {
-        id = "T-03", cf = CF(at(50, 404)), palette = "SLATE", scan = 0.55,
+        id = "T-03", cf = CF(at(50, 404)), palette = "SLATE", scan = 0.55, archetype = "PATROL",
         patrol = { points = { at(50, 404), at(50, 530) }, speed = 5.5, turnRate = math.rad(24) },
     })
     TrainingMech.Create(d, { id = "M-01", position = at(-42, 548), yaw = 0 })

@@ -146,3 +146,9 @@ require(script.Parent.WeaponClient).Start(remotes, CockpitMode, ShowroomAnimator
 -- M10A: range control panel and client-side destruction effects (cosmetic only; the server decides everything).
 local rangeHud = require(script.Parent.RangeHud).Start(remotes, CockpitMode)
 require(script.Parent.DestructionFx).Start(remotes, rangeHud)
+-- M10B: active tank combat. Order matters: the HUD exists first (the shell effects report to it), then the effects, then the link back.
+local combatHud = require(script.Parent.CombatHud).Start(remotes, CockpitMode)
+local damageFx = require(script.Parent.MechDamageFx).Start()
+local tankFx = require(script.Parent.TankFx).Start(remotes, combatHud)
+combatHud.SetFx(tankFx)
+combatHud.SetDamageFx(damageFx)

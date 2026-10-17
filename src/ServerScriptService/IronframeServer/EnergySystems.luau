@@ -37,6 +37,7 @@ function Systems.Publish(p, force)
         EnergyLimited = Systems.Limited(p), EnergyWeaponRate = rounded(p.weaponRate), EnergyShieldDemand = rounded(e.delivered.shield or 0),
         EnergySprintDemand = rounded(e.delivered.sprint or 0), EnergySprintReserve = rounded(Energy.Reserve(e, "sprint")),
         EnergyWeaponReserve = rounded(Energy.Reserve(e, "weapons")),
+        ReactorScale = rounded(p.reactorScale or 1),
         EnergyTestReport = p.testReport, EnergyTestPending = p.pending ~= nil,
         EnergyTestETA = p.pending and rounded(math.max(0, p.pending.at - s.time)) or 0,
     }
@@ -77,6 +78,13 @@ end
 function Systems.ResetProfile(p)
     p.profile = Profiles.New()
     p.sprintLimitedUntil, p.weaponLimitedUntil = -1, -1
+    Systems.Publish(p, true)
+end
+-- Reactor housing damage (M10B): scales the effective generation. The energy ledger itself is untouched; it simply sees less supply.
+function Systems.SetReactorScale(p, scale)
+    p.baseOutput = p.baseOutput or p.config.output
+    p.reactorScale = math.clamp(scale, 0, 1)
+    p.config.output = p.baseOutput * p.reactorScale
     Systems.Publish(p, true)
 end
 function Systems.Activate(p, enabled)

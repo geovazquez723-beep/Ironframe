@@ -384,6 +384,37 @@ test("m08d: HMG-20 preset compiles, rejects shoulder fit and builds a ported, ba
     end
 end)
 
+-- M10B ------------------------------------------------------------------------------------------------------------------------
+test("m10b: combat config, tank state machine and Bastion damage model load and obey their invariants", function()
+    local Config = require(Shared:WaitForChild("CombatConfig"))
+    local Brain = require(Shared:WaitForChild("TankBrain"))
+    local Damage = require(Shared:WaitForChild("MechDamage"))
+    local DestructionConfig = require(Shared:WaitForChild("DestructionConfig"))
+    assert(Config.defaultMode == "PASSIVE", "range starts PASSIVE")
+    assert(DestructionConfig.WeaponClass(Config.shellWeaponId, "ballistic", 55) == "HEAVY")
+    for _, id in ipairs(Config.archetypeOrder) do
+        local a = Config.archetypes[id]
+        assert(a.warnTime >= 0.7 and a.warnTime <= 1.25 and a.shell.speed > 0 and a.reload > a.warnTime)
+    end
+    -- a tank with a clear shot fires exactly once per warning + reload cycle; a disabled one never fires
+    local b = Brain.New(Config.archetypes.SENTRY)
+    local senses = { active = true, alive = true, canFire = true, canMove = false, resetting = false, hasTarget = true, range = 100, los = true, inArc = true, aimError = 0 }
+    local shots = 0
+    for _ = 1, 100 do if Brain.Step(b, 0.05, senses).fire then shots += 1 end end
+    assert(shots == 1, "one shot in 5 s, got " .. shots)
+    senses.canFire = false
+    for _ = 1, 400 do assert(not Brain.Step(b, 0.05, senses).fire) end
+    assert(b.state == "DISABLED")
+    -- there is no pilot region; core failure is the only terminal event and it is reported once
+    local s = Damage.New()
+    for _, region in ipairs(Damage.Regions) do assert(region ~= "PILOT" and region ~= "HUMAN") end
+    local failures = 0
+    for _ = 1, 50 do if Damage.Apply(s, "CORE", 100).coreFailed then failures += 1 end end
+    assert(failures == 1 and s.coreFailed)
+    Damage.Reset(s)
+    assert(not s.coreFailed and Damage.Fraction(s, "CORE") == 1)
+end)
+
 function SelfTest.Run()
     local result = { passed = 0, total = #tests, failed = {} }
     for _, t in ipairs(tests) do

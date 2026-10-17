@@ -9,6 +9,10 @@
 
 local Destructibles = require(script.Parent.Destructibles)
 local CombatTargets = require(script.Parent.CombatTargets)
+local TankCombat = require(script.Parent.TankCombat) -- M10B
+local BastionDamage = require(script.Parent.BastionDamage) -- M10B
+local Locomotion = require(script.Parent.Locomotion) -- M10B (test teleport / input only)
+local EnergySystems = require(script.Parent.EnergySystems) -- M10B (test shield only)
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local RangeControl = {}
@@ -40,7 +44,7 @@ function RangeControl.Init(fxRemote: RemoteEvent, resetRemote: RemoteEvent, sess
         session.lastRangeReset = now
         local district = Destructibles.Get(session.bay)
         if district then
-            Destructibles.Reset(district, kind)
+            TankCombat.Reset(district, kind) -- Destructibles.Reset plus the combat state (shells in flight, Bastion repair on ALL)
         end
     end)
 end
@@ -71,7 +75,7 @@ installAuditInterface = function(sessions: { [Player]: any })
             audit.persistentEmitters = d.persistentEmitters
             return audit
         elseif command == "reset" then
-            return Destructibles.Reset(d, a or "ALL")
+            return TankCombat.Reset(d, a or "ALL")
         elseif command == "part" then
             if a == "tank" then
                 local tank = d.vehicles[b]
@@ -100,9 +104,95 @@ installAuditInterface = function(sessions: { [Player]: any })
         elseif command == "state" then
             local out = { vehicles = {}, mech = d.mech and d.mech.status.status, modules = #d.modules }
             for i, tank in ipairs(d.vehicles) do
-                out.vehicles[i] = { id = tank.id, status = tank.status.status, pos = tank.position }
+                out.vehicles[i] = { id = tank.id, status = tank.status.status, pos = tank.position, ai = tank.ai and tank.ai.state }
             end
             return out
+        -- M10B combat audit / test commands. They drive the SAME TankCombat / BastionDamage / shield paths as live play.
+        elseif command == "combat" then
+            return TankCombat.Audit(d)
+        elseif command == "hold" then -- tanks stand down without leaving ACTIVE mode (isolates forced shells in tests)
+            TankCombat.Of(d).holdFire = a == true
+            return true
+        elseif command == "mode" then
+            return TankCombat.SetMode(d, a, "audit")
+        elseif command == "dfire" then -- tank index, aim Vector3?, exact aim?
+            return TankCombat.DebugFire(d, a, b, c)
+        elseif command == "mech" then
+            local session = d.owner and sessions[d.owner]
+            return session and BastionDamage.Snapshot(session)
+        elseif command == "hit" then -- region, penetrating damage (bypasses the shield: used to test components and ejection)
+            local session = d.owner and sessions[d.owner]
+            return session and BastionDamage.Hit(session, a, b) ~= nil
+        elseif command == "repair" then
+            local session = d.owner and sessions[d.owner]
+            if session then
+                BastionDamage.Repair(session)
+            end
+            return session ~= nil
+        elseif command == "teleport" then -- Vector3 position, yaw (radians): places the deployed Bastion
+            local session = d.owner and sessions[d.owner]
+            if session and session.controller then
+                Locomotion.Teleport(session.controller, a, b or 0)
+                return true
+            end
+            return false
+        elseif command == "testwall" then -- Vector3(x, _, z) bay-local, width, height: a temporary tall concrete wall (test equipment, removed by "untestwall")
+            if d.testWall then
+                return d.testWall.part
+            end
+            local size = Vector3.new(b or 24, c or 30, 3)
+            d.testWall = Destructibles.AddModule(d, {
+                name = "TestWall", material = "CONCRETE", surface = Enum.Material.Concrete, color = Color3.fromRGB(110, 112, 110), size = size,
+                cf = CFrame.new(d.origin + Vector3.new(a.X, size.Y / 2, a.Z)), hp = 300,
+            })
+            return d.testWall.part
+        elseif command == "untestwall" then
+            local obj = d.testWall
+            if obj then
+                Destructibles.UnindexObject(obj)
+                table.remove(d.modules, table.find(d.modules, obj))
+                table.remove(d.objects, table.find(d.objects, obj))
+                d.totals.sections -= 1
+                obj.root:Destroy()
+                d.testWall = nil
+            end
+            return obj ~= nil
+        elseif command == "shield" then -- same call the RequestShield remote makes (rate limit aside)
+            local session = d.owner and sessions[d.owner]
+            if session and session.power then
+                local ok, reason = EnergySystems.Activate(session.power, session.deployment == "ACTIVE")
+                return ok, reason
+            end
+            return false, "no session"
+        elseif command == "drain" then -- set capacitor charge (test equipment)
+            local session = d.owner and sessions[d.owner]
+            if session and session.power then
+                session.power.energy.charge = a
+                session.power.energy.tokens = math.min(session.power.energy.tokens, a)
+                return true
+            end
+            return false
+        elseif command == "drive" then -- throttle, steer, sprint: same sanitised input path as DriveInput
+            local session = d.owner and sessions[d.owner]
+            if session and session.controller then
+                Locomotion.SetInput(session.controller, a, b, c)
+                return true
+            end
+            return false
+        elseif command == "session" then
+            local session = d.owner and sessions[d.owner]
+            if not session then
+                return nil
+            end
+            local s = session.controller and session.controller.state
+            return { machineState = session.machineState, pilotSafe = session.pilotSafe, deployment = session.deployment, pilotTargetable = session.pilotTargetable,
+                x = s and s.x, y = s and s.y, z = s and s.z, yaw = s and s.yaw, speed = s and s.speed, shield = session.power and session.power.shield.state,
+                shieldReason = session.power and session.power.shield.reason, charge = session.power and session.power.energy.charge,
+                output = session.power and session.power.energy.output, power = session.power and session.power.energy.reactorSupply,
+                ammo = session.weapons and session.weapons.shots }
+        elseif command == "target" then
+            local target = TankCombat.TargetOf(d)
+            return target ~= nil
         end
         return nil
     end

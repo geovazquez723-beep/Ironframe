@@ -178,18 +178,40 @@ local function buildStructure(display: Display)
         section("leg" .. t, "Shin" .. t, Vector2.new(36, 84), sign * 36, 262)
         section("leg" .. t, "Foot" .. t, Vector2.new(54, 24), sign * 40, 352)
     end
-    local rows = { { "TORSO", "torso" }, { "L ARM", "armL" }, { "R ARM", "armR" }, { "L LEG", "legL" }, { "R LEG", "legR" } }
-    widgets.structureBars = {}
+    -- M10B: six live damage regions (core, weapon assemblies, legs, reactor housing) from the Telemetry "damage.regions" feed.
+    local rows = { { "CORE TORSO", "torso" }, { "L WEAPON ASSY", "armL" }, { "R WEAPON ASSY", "armR" }, { "L LEG ASSY", "legL" }, { "R LEG ASSY", "legR" }, { "REACTOR HOUSING", "reactor" } }
+    widgets.structureBars, widgets.structureLabels = {}, {}
     for i, row in ipairs(rows) do
-        local y = 20 + (i - 1) * 62
-        label(c, row[1], UDim2.fromOffset(412, y), UDim2.fromOffset(200, 24), { TextSize = 20, TextColor3 = WHITE })
-        widgets.structureBars[row[2]] = bar(c, UDim2.fromOffset(412, y + 28), UDim2.fromOffset(204, 14), 1, CYAN)
+        local y = 8 + (i - 1) * 53
+        widgets.structureLabels[row[2]] = label(c, row[1], UDim2.fromOffset(412, y), UDim2.fromOffset(216, 24), { TextSize = 19, TextColor3 = WHITE })
+        widgets.structureBars[row[2]] = bar(c, UDim2.fromOffset(412, y + 26), UDim2.fromOffset(204, 14), 1, CYAN)
     end
-    widgets.integrity = label(c, "INTEGRITY  ---", UDim2.fromOffset(412, 336), UDim2.fromOffset(216, 26), { TextSize = 20, TextColor3 = WHITE })
-    widgets.structureNote = label(c, "ARMOR RATED  /  DAMAGE FEED: STANDBY", UDim2.fromOffset(412, 372), UDim2.fromOffset(216, 56), { TextSize = 18, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
+    widgets.integrity = label(c, "INTEGRITY  ---", UDim2.fromOffset(412, 334), UDim2.fromOffset(216, 26), { TextSize = 20, TextColor3 = WHITE })
+    widgets.structureNote = label(c, "ARMOR RATED  /  DAMAGE FEED: STANDBY", UDim2.fromOffset(412, 366), UDim2.fromOffset(216, 70), { TextSize = 18, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
+    local REGION_OF = { torso = "CORE", armL = "ARM_L", armR = "ARM_R", legL = "LEG_L", legR = "LEG_R", reactor = "REACTOR" }
     display.refresh = function()
-        widgets.integrity.Text = string.format("INTEGRITY  %.0f", Telemetry.Value("integrity.total", 0))
-        statusTag(display, "STANDBY")
+        local fractions = Telemetry.Value("damage.regions", nil)
+        local worst = 1
+        for key, region in pairs(REGION_OF) do
+            local f = if fractions then fractions[region] or 1 else 1
+            worst = math.min(worst, f)
+            setBar(widgets.structureBars[key], f, if f <= 0.25 then RED elseif f <= 0.6 then AMBER else CYAN)
+            if key ~= "reactor" then
+                Hud.SetSectionCondition(key, f)
+            end
+        end
+        local total = Telemetry.Value("integrity.total", 0)
+        widgets.integrity.Text = string.format("INTEGRITY  %.0f", total * (if fractions then fractions.CORE or 1 else 1))
+        local speed, reactor = Telemetry.Value("damage.speed", 1), Telemetry.Value("damage.reactor", 1)
+        local disabled = Telemetry.Value("damage.disabled", "")
+        local notes = {}
+        table.insert(notes, if worst >= 0.999 then "ALL ASSEMBLIES NOMINAL" else "DAMAGE FEED: LIVE")
+        if speed < 0.999 then table.insert(notes, string.format("DRIVE %d%%", math.floor(speed * 100 + 0.5))) end
+        if reactor < 0.999 then table.insert(notes, string.format("REACTOR %d%%", math.floor(reactor * 100 + 0.5))) end
+        if disabled ~= "" then table.insert(notes, "OFFLINE: " .. (string.gsub(disabled, "_", " "))) end
+        widgets.structureNote.Text = table.concat(notes, "\n")
+        widgets.structureNote.TextColor3 = if worst <= 0.25 then RED elseif worst < 0.999 then AMBER else CYAN
+        statusTag(display, if fractions then "LIVE" else "STANDBY")
     end
 end
 

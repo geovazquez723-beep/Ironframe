@@ -256,7 +256,7 @@ function Fx.Start(remotes, hud)
                     f.av *= 0.6
                     if f.vel.Magnitude < 5 and hit.Normal.Y > 0.5 then
                         f.settled = true
-                        f.vel = V3.zero
+                        f.vel = Vector3.zero -- (M10A latent bug: V3 is Vector3.new, so V3.zero errored whenever a fragment settled)
                         f.part.CFrame = CF(f.pos) * f.rot
                         continue
                     end
