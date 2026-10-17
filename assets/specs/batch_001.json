@@ -1,0 +1,171 @@
+{
+  "specVersion": 1,
+  "batch": "batch_001",
+  "style": "Grounded military sci-fi industrial: dark gunmetal machinery, desaturated olive armor panels, exposed fasteners, subtle hydraulics, restrained yellow accents. No text, no faces.",
+  "assets": [
+    {
+      "id": "HNG_001",
+      "category": "hangar",
+      "name": "CraneHookAssembly",
+      "prompt": "Heavy overhead crane hook assembly: a forged load hook hanging from a reinforced hook block housing with a sheave wheel and short wire rope lead",
+      "size": {
+        "x": 5,
+        "y": 12,
+        "z": 3
+      },
+      "maxTriangles": 4000,
+      "segmentation": "explicit",
+      "partNames": [
+        "hook",
+        "hook block housing",
+        "sheave wheel",
+        "wire rope"
+      ],
+      "intendedUse": "Hangar ceiling rail prop above the maintenance plinth",
+      "rig": "Static prop; origin should sit at the top of the rope so it can hang from an overhead rail"
+    },
+    {
+      "id": "HNG_002",
+      "category": "hangar",
+      "name": "HydraulicMaintenanceLift",
+      "prompt": "Industrial hydraulic maintenance lift: a scissor-lift platform with a heavy base frame, crossed steel scissor arms, a grated work platform, and a large hydraulic cylinder",
+      "size": {
+        "x": 12,
+        "y": 7,
+        "z": 10
+      },
+      "maxTriangles": 5000,
+      "segmentation": "explicit",
+      "partNames": [
+        "base frame",
+        "scissor arms",
+        "platform",
+        "hydraulic cylinder"
+      ],
+      "intendedUse": "Hangar floor prop beside a mech bay",
+      "rig": "Static prop; scissor arms and platform may later animate vertically (separate parts required)"
+    },
+    {
+      "id": "HNG_003",
+      "category": "hangar",
+      "name": "RoboticServiceArm",
+      "prompt": "Articulated robotic service arm on a bolted pedestal base, with a lower arm, upper arm, wrist joint and a heavy tool head, visible hydraulic lines and joint collars",
+      "size": {
+        "x": 7,
+        "y": 12,
+        "z": 7
+      },
+      "maxTriangles": 7000,
+      "segmentation": "explicit",
+      "partNames": [
+        "pedestal base",
+        "lower arm",
+        "upper arm",
+        "wrist",
+        "tool head"
+      ],
+      "intendedUse": "Hangar prop that services mechs; candidate for simple idle animation",
+      "rig": "Parts must be separate for joint rotation; pivots are NOT guaranteed at joints (review needed)"
+    },
+    {
+      "id": "HNG_004",
+      "category": "hangar",
+      "name": "DiagnosticConsole",
+      "prompt": "Armored diagnostic computer console: a rugged angled steel cabinet with a recessed screen bezel, a sloped keyboard tray, heavy corner guards and cable conduits",
+      "size": {
+        "x": 5,
+        "y": 5,
+        "z": 3.5
+      },
+      "maxTriangles": 4000,
+      "segmentation": "explicit",
+      "partNames": [
+        "console body",
+        "screen",
+        "keyboard tray"
+      ],
+      "intendedUse": "Hangar terminal prop; screen part could later carry a SurfaceGui",
+      "rig": "Static prop; screen face should be a flat quad (review)"
+    },
+    {
+      "id": "HNG_005",
+      "category": "hangar",
+      "name": "CableReel",
+      "prompt": "Heavy industrial cable reel: a large steel drum wound with thick black power cable on a sturdy welded support frame with a crank handle",
+      "size": {
+        "x": 5,
+        "y": 5,
+        "z": 3
+      },
+      "maxTriangles": 2000,
+      "segmentation": "explicit",
+      "partNames": [
+        "reel drum",
+        "support frame"
+      ],
+      "intendedUse": "Hangar floor prop",
+      "rig": "Static prop; drum may spin about its axle later"
+    },
+    {
+      "id": "HNG_006",
+      "category": "hangar",
+      "name": "ToolCabinet",
+      "prompt": "Mobile mechanical tool cabinet on four heavy casters, with a hinged double door, pull-out drawers, reinforced corners and a top work surface",
+      "size": {
+        "x": 5,
+        "y": 6,
+        "z": 2.5
+      },
+      "maxTriangles": 3000,
+      "segmentation": "explicit",
+      "partNames": [
+        "cabinet body",
+        "doors",
+        "wheels"
+      ],
+      "intendedUse": "Hangar floor prop",
+      "rig": "Static prop"
+    },
+    {
+      "id": "HNG_007",
+      "category": "hangar",
+      "name": "OverheadFloodlight",
+      "prompt": "Industrial overhead floodlight assembly: a rugged lamp housing with a protective cage and lens, on an adjustable mounting yoke and a ceiling bracket",
+      "size": {
+        "x": 4,
+        "y": 5,
+        "z": 3
+      },
+      "maxTriangles": 2000,
+      "segmentation": "explicit",
+      "partNames": [
+        "lamp housing",
+        "mounting yoke",
+        "ceiling bracket"
+      ],
+      "intendedUse": "Hangar lighting fixture; a SpotLight can be attached to the lamp housing",
+      "rig": "Static prop; lens face should point -Z or be re-oriented (review)"
+    },
+    {
+      "id": "MEC_001",
+      "category": "mech",
+      "name": "ShoulderArmorPrototype",
+      "prompt": "IF-42 military mech shoulder armor: a broad layered pauldron shell with overlapping armor lames hanging from its outer edge, a rugged mounting pylon and exposed fasteners",
+      "size": {
+        "x": 5,
+        "y": 4,
+        "z": 5.5
+      },
+      "maxTriangles": 6000,
+      "segmentation": "explicit",
+      "partNames": [
+        "shoulder shell",
+        "mounting pylon",
+        "armor lame plates"
+      ],
+      "intendedUse": "Prototype to replace procedural PauldronShell*/PauldronCap* (see ASSET_PIPELINE.md)",
+      "rig": "Needs re-pivoting to the Torso-frame LocalCF and a left/right mirror before PartKit override; visual only for now"
+    }
+  ],
+  "promptLimitNote": "generate_mesh rejected a ~560-char prompt with 'Character limit exceeded'; keep prompt+style short (limit not documented; measured below)."
+}

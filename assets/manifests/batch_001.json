@@ -1,0 +1,658 @@
+{
+  "batch": "batch_001",
+  "specVersion": 1,
+  "assets": {
+    "HNG_001": {
+      "status": "NEEDS_REVIEW",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "NEEDS_REVIEW",
+          "modelName": "HNG_001_CraneHookAssembly",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001.HNG_001_CraneHookAssembly",
+          "generationId": "fb12deed-cd2c-4892-9a9b-c21555a3e909",
+          "publishedAssetId": "139132454061718",
+          "jobId": "75ff26b1-cc10-45f6-888a-34aa1fd3a2a8",
+          "boundingBox": [
+            3.78,
+            5.197,
+            3.0
+          ],
+          "meshPartCount": 4,
+          "triangles": 3922,
+          "parts": [
+            {
+              "name": "hook_geom",
+              "size": [
+                1.072,
+                3.056,
+                3
+              ],
+              "meshId": "rbxassetid://120395663588569",
+              "textureId": "rbxassetid://74652614760030",
+              "triangles": 858
+            },
+            {
+              "name": "hook block housing_geom",
+              "size": [
+                3.78,
+                2.859,
+                2.403
+              ],
+              "meshId": "rbxassetid://80502930547653",
+              "textureId": "rbxassetid://129006755050660",
+              "triangles": 1272
+            },
+            {
+              "name": "sheave wheel_geom",
+              "size": [
+                2.134,
+                1.733,
+                1.668
+              ],
+              "meshId": "rbxassetid://86821554206152",
+              "textureId": "rbxassetid://121580110737105",
+              "triangles": 1610
+            },
+            {
+              "name": "wire rope_geom",
+              "size": [
+                1.192,
+                1.922,
+                0.277
+              ],
+              "meshId": "rbxassetid://122460773895389",
+              "textureId": "rbxassetid://85052562326070",
+              "triangles": 182
+            }
+          ],
+          "evaluation": "Plausible trolley hoist block with sheave wheels, bolted olive housing and hook. Hook and rope are small relative to the 5x12x3 request (bbox 3.8x5.2x3), so it will not read as a 12-stud-tall hanging assembly; usable as a hoist block. Rig: origin is not at the rope top.",
+          "recordedAt": "2026-10-17T00:33:27+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 139132454061718,
+        "verifiedBy": "InsertService:LoadAsset in Studio; staged MeshIds all found in the loaded model",
+        "placeFile": "NOT_SAVED"
+      }
+    },
+    "HNG_002": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "modelName": "HNG_002_HydraulicMaintenanceLift",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001.HNG_002_HydraulicMaintenanceLift",
+          "generationId": "4d4bd030-be50-4e40-9ff9-8b938a89f50e",
+          "publishedAssetId": "99298219342682",
+          "jobId": "26f0ee54-a292-4bec-b286-28f4a8cfd1cb",
+          "boundingBox": [
+            4.479,
+            7.0,
+            8.069
+          ],
+          "meshPartCount": 4,
+          "triangles": 4900,
+          "parts": [
+            {
+              "name": "base frame_geom",
+              "size": [
+                4.48,
+                1.853,
+                7.045
+              ],
+              "meshId": "rbxassetid://90046989722848",
+              "textureId": "rbxassetid://106999476213439",
+              "triangles": 2072
+            },
+            {
+              "name": "scissor arms_geom",
+              "size": [
+                3.281,
+                4.001,
+                6.487
+              ],
+              "meshId": "rbxassetid://73405972957166",
+              "textureId": "rbxassetid://131912873576880",
+              "triangles": 1976
+            },
+            {
+              "name": "platform_geom",
+              "size": [
+                3.519,
+                1.469,
+                8.069
+              ],
+              "meshId": "rbxassetid://72893589242665",
+              "textureId": "rbxassetid://122452852692628",
+              "triangles": 524
+            },
+            {
+              "name": "hydraulic cylinder_geom",
+              "size": [
+                2.382,
+                1.378,
+                0.692
+              ],
+              "meshId": "rbxassetid://87038730797086",
+              "textureId": "rbxassetid://101881793627329",
+              "triangles": 328
+            }
+          ],
+          "evaluation": "Convincing wheeled scissor lift: crossed arms, grated platform with rail, cylinder, wheels, olive paint over grey frame. Visual accept. Footprint narrower than the requested 12x7x10 (4.5x7x8.1).",
+          "recordedAt": "2026-10-17T00:33:27+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 99298219342682,
+        "verifiedBy": "InsertService:LoadAsset in Studio; staged MeshIds all found in the loaded model",
+        "placeFile": "NOT_SAVED"
+      }
+    },
+    "HNG_003": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "modelName": "HNG_003_RoboticServiceArm",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001.HNG_003_RoboticServiceArm",
+          "generationId": "372dda9a-348f-406b-b319-a163b68909d2",
+          "publishedAssetId": "85087665760063",
+          "jobId": "4ca92aba-a3f2-42e4-9297-05c3f32db3d9",
+          "boundingBox": [
+            3.6,
+            9.247,
+            7.0
+          ],
+          "meshPartCount": 5,
+          "triangles": 6726,
+          "parts": [
+            {
+              "name": "pedestal base_geom",
+              "size": [
+                3.6,
+                2.941,
+                3.775
+              ],
+              "meshId": "rbxassetid://70510021649970",
+              "textureId": "rbxassetid://122858079195852",
+              "triangles": 1820
+            },
+            {
+              "name": "lower arm_geom",
+              "size": [
+                2.848,
+                4.355,
+                2.161
+              ],
+              "meshId": "rbxassetid://73623100599542",
+              "textureId": "rbxassetid://109523833552553",
+              "triangles": 1708
+            },
+            {
+              "name": "upper arm_geom",
+              "size": [
+                1.767,
+                5.368,
+                6.655
+              ],
+              "meshId": "rbxassetid://124524858322896",
+              "textureId": "rbxassetid://90406408406930",
+              "triangles": 2152
+            },
+            {
+              "name": "wrist_geom",
+              "size": [
+                0.864,
+                0.504,
+                0.885
+              ],
+              "meshId": "rbxassetid://137755148796390",
+              "textureId": "rbxassetid://108325259739432",
+              "triangles": 208
+            },
+            {
+              "name": "tool head_geom",
+              "size": [
+                1.879,
+                2.384,
+                1.895
+              ],
+              "meshId": "rbxassetid://71226442091773",
+              "textureId": "rbxassetid://129648644128914",
+              "triangles": 838
+            }
+          ],
+          "evaluation": "Strong: bolted pedestal, jointed lower/upper arm with hydraulic lines, yellow collar, gripper tool head. Visual accept. Parts are separate but pivots are not at the joints and the wrist is a tiny fragment: re-pivot before any animation.",
+          "recordedAt": "2026-10-17T00:33:27+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 85087665760063,
+        "verifiedBy": "InsertService:LoadAsset in Studio; staged MeshIds all found in the loaded model",
+        "placeFile": "NOT_SAVED"
+      }
+    },
+    "HNG_004": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "modelName": "HNG_004_DiagnosticConsole",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001.HNG_004_DiagnosticConsole",
+          "generationId": "a840661b-fbab-4072-bb1f-bcad7d27ac63",
+          "publishedAssetId": "126171599709219",
+          "jobId": "a2f1d7c7-7398-4163-9cc3-fe4d023a1fc3",
+          "boundingBox": [
+            2.988,
+            5.0,
+            2.949
+          ],
+          "meshPartCount": 3,
+          "triangles": 3908,
+          "parts": [
+            {
+              "name": "console body_geom",
+              "size": [
+                2.989,
+                5.0,
+                2.95
+              ],
+              "meshId": "rbxassetid://74911469386338",
+              "textureId": "rbxassetid://75661362415177",
+              "triangles": 3084
+            },
+            {
+              "name": "screen_geom",
+              "size": [
+                2.07,
+                1.469,
+                0.441
+              ],
+              "meshId": "rbxassetid://120993648998994",
+              "textureId": "rbxassetid://106719778525676",
+              "triangles": 182
+            },
+            {
+              "name": "keyboard tray_geom",
+              "size": [
+                2.748,
+                1.047,
+                1.389
+              ],
+              "meshId": "rbxassetid://122781936620814",
+              "textureId": "rbxassetid://132901506471683",
+              "triangles": 642
+            }
+          ],
+          "evaluation": "Rugged angled console with recessed screen bezel, button panel, vents, cable and base plate. Visual accept. Screen is a separate part (candidate for a SurfaceGui); no baked text.",
+          "recordedAt": "2026-10-17T00:33:27+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 126171599709219,
+        "verifiedBy": "InsertService:LoadAsset in Studio; staged MeshIds all found in the loaded model",
+        "placeFile": "NOT_SAVED"
+      }
+    },
+    "HNG_005": {
+      "status": "ACCEPTED",
+      "retryCount": 2,
+      "attempts": [
+        {
+          "status": "FAILED",
+          "jobId": "279d7e37-59e8-40ae-8817-d12d7a81028d",
+          "error": "Async job failed: Failed to publish assets with error: Operation failed: Too Many Requests (rate limit while 3 jobs ran concurrently). An earlier synchronous call returned Request timed out, yet its generation still arrived in Workspace.",
+          "recordedAt": "2026-10-17T00:33:27+00:00"
+        },
+        {
+          "status": "ACCEPTED",
+          "modelName": "HNG_005_CableReel",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001.HNG_005_CableReel",
+          "generationId": "11f2e0c0-9a5f-4d09-9db1-316be415a6ba",
+          "publishedAssetId": null,
+          "boundingBox": [
+            3.488,
+            3.066,
+            3.0
+          ],
+          "meshPartCount": 2,
+          "triangles": 1998,
+          "note": "Result came from the timed-out synchronous call, so its job id and model asset id were never reported.",
+          "parts": [
+            {
+              "name": "reel drum_geom",
+              "size": [
+                3.488,
+                2.927,
+                3.0
+              ],
+              "meshId": "rbxassetid://87789588886539",
+              "textureId": "rbxassetid://73475328719472",
+              "triangles": 1812
+            },
+            {
+              "name": "support frame_geom",
+              "size": [
+                3.214,
+                1.731,
+                2.789
+              ],
+              "meshId": "rbxassetid://135387540239600",
+              "textureId": "rbxassetid://89045083508347",
+              "triangles": 186
+            }
+          ],
+          "evaluation": "Good: olive flanges with ribs, wound black cable, welded tubular frame, crank hub. Visual accept.",
+          "recordedAt": "2026-10-17T00:33:27+00:00"
+        },
+        {
+          "status": "ACCEPTED",
+          "modelName": "HNG_005_CableReel",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001.HNG_005_CableReel",
+          "generationId": "e4f387b3-a10c-4f21-9032-3f5a51e65aa6",
+          "publishedAssetId": "104826683943789",
+          "jobId": "418bd8da-5772-49e0-bb6d-ebdf4a9b8db0",
+          "boundingBox": [
+            2.709,
+            2.836,
+            3.0
+          ],
+          "meshPartCount": 2,
+          "triangles": 1998,
+          "note": "Retry after the rate-limit failure; canonical candidate. Attempt 2 (first sync call) kept under _alternates.",
+          "parts": [
+            {
+              "name": "reel drum_geom",
+              "size": [
+                1.524,
+                1.437,
+                2.49
+              ],
+              "meshId": "rbxassetid://109511568078523",
+              "textureId": "rbxassetid://84721205816259",
+              "triangles": 982
+            },
+            {
+              "name": "support frame_geom",
+              "size": [
+                2.709,
+                2.837,
+                2.736
+              ],
+              "meshId": "rbxassetid://90888081212133",
+              "textureId": "rbxassetid://128294579073657",
+              "triangles": 1016
+            }
+          ],
+          "evaluation": "Good: olive flanges, wound black cable, light tubular frame, yellow crank accent. Visual accept; marginally smaller than requested.",
+          "recordedAt": "2026-10-17T00:33:57+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 104826683943789,
+        "verifiedBy": "InsertService:LoadAsset in Studio; staged MeshIds all found in the loaded model",
+        "placeFile": "NOT_SAVED"
+      }
+    },
+    "HNG_006": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "modelName": "HNG_006_ToolCabinet",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001.HNG_006_ToolCabinet",
+          "generationId": "0e9e65c3-50ed-462d-afe1-80310f32d980",
+          "publishedAssetId": "131010300372520",
+          "jobId": "9025fd05-3619-44cc-ab15-d030679b74bb",
+          "boundingBox": [
+            4.157,
+            2.931,
+            2.5
+          ],
+          "meshPartCount": 3,
+          "triangles": 2668,
+          "parts": [
+            {
+              "name": "cabinet body_geom",
+              "size": [
+                4.157,
+                2.653,
+                2.393
+              ],
+              "meshId": "rbxassetid://78231599137602",
+              "textureId": "rbxassetid://76701824516702",
+              "triangles": 1650
+            },
+            {
+              "name": "doors_geom",
+              "size": [
+                3.731,
+                2.119,
+                0.233
+              ],
+              "meshId": "rbxassetid://71462403806021",
+              "textureId": "rbxassetid://96684954471766",
+              "triangles": 668
+            },
+            {
+              "name": "wheels_geom",
+              "size": [
+                0.441,
+                0.425,
+                0.307
+              ],
+              "meshId": "rbxassetid://116607017187417",
+              "textureId": "rbxassetid://129823341053436",
+              "triangles": 350
+            }
+          ],
+          "evaluation": "Reads as a drawer cabinet with doors, corner trim and casters, olive with yellow edge accents. Visual accept. Squat (4.2x2.9x2.5 vs requested 5x6x2.5); the wheels part is one tiny caster mesh, not four.",
+          "recordedAt": "2026-10-17T00:33:27+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 131010300372520,
+        "verifiedBy": "InsertService:LoadAsset in Studio; staged MeshIds all found in the loaded model",
+        "placeFile": "NOT_SAVED"
+      }
+    },
+    "HNG_007": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "modelName": "HNG_007_OverheadFloodlight",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001.HNG_007_OverheadFloodlight",
+          "generationId": "a21a43d2-12fc-4dde-ada1-2651d71d857e",
+          "publishedAssetId": "107457433144343",
+          "jobId": "567616c1-254c-48a2-a91e-bb6d1de81bee",
+          "boundingBox": [
+            2.698,
+            3.557,
+            3.0
+          ],
+          "meshPartCount": 3,
+          "triangles": 1996,
+          "parts": [
+            {
+              "name": "lamp housing_geom",
+              "size": [
+                2.283,
+                2.226,
+                2.811
+              ],
+              "meshId": "rbxassetid://72811214679812",
+              "textureId": "rbxassetid://79306301217956",
+              "triangles": 1044
+            },
+            {
+              "name": "mounting yoke_geom",
+              "size": [
+                2.32,
+                1.916,
+                2.939
+              ],
+              "meshId": "rbxassetid://97062599894271",
+              "textureId": "rbxassetid://84924083234870",
+              "triangles": 372
+            },
+            {
+              "name": "ceiling bracket_geom",
+              "size": [
+                2.698,
+                3.557,
+                2.012
+              ],
+              "meshId": "rbxassetid://116262872620960",
+              "textureId": "rbxassetid://75674412544970",
+              "triangles": 580
+            }
+          ],
+          "evaluation": "Caged lamp housing with lens, U-yoke and ceiling plate; clean and plausible. Visual accept. A SpotLight can attach to the lamp housing.",
+          "recordedAt": "2026-10-17T00:33:27+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 107457433144343,
+        "verifiedBy": "InsertService:LoadAsset in Studio; staged MeshIds all found in the loaded model",
+        "placeFile": "NOT_SAVED"
+      }
+    },
+    "MEC_001": {
+      "status": "REJECTED",
+      "retryCount": 1,
+      "attempts": [
+        {
+          "status": "REJECTED",
+          "modelName": "MEC_001_attempt1_cuirass",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001._rejected.MEC_001_attempt1_cuirass",
+          "generationId": "55cc0c33-bc6f-4fb8-89b4-47b744592174",
+          "publishedAssetId": "114426959955005",
+          "jobId": "d799e7f1-7566-4faf-b8ac-d89512117cc3",
+          "boundingBox": [
+            4.644,
+            4.0,
+            3.23
+          ],
+          "meshPartCount": 3,
+          "triangles": 5986,
+          "parts": [
+            {
+              "name": "shoulder shell_geom",
+              "size": [
+                4.644,
+                4.0,
+                3.23
+              ],
+              "meshId": "rbxassetid://109515118597538",
+              "textureId": "rbxassetid://92704457250493",
+              "triangles": 4426
+            },
+            {
+              "name": "mounting pylon_geom",
+              "size": [
+                2.393,
+                0.583,
+                2.462
+              ],
+              "meshId": "rbxassetid://101488328651180",
+              "textureId": "rbxassetid://104007565319222",
+              "triangles": 112
+            },
+            {
+              "name": "armor lame plates_geom",
+              "size": [
+                4.51,
+                3.757,
+                3.041
+              ],
+              "meshId": "rbxassetid://78963431886921",
+              "textureId": "rbxassetid://139332051372770",
+              "triangles": 1448
+            }
+          ],
+          "evaluation": "REJECTED: a human-style cuirass (breastplate with two shoulder pads and a neck opening) with organic scute texture, not a single mech pauldron.",
+          "recordedAt": "2026-10-17T00:33:27+00:00"
+        },
+        {
+          "status": "REJECTED",
+          "modelName": "MEC_001_ShoulderArmorPrototype",
+          "modelPath": "Workspace.IronframeGeneratedAssets.batch_001.MEC_001_ShoulderArmorPrototype",
+          "generationId": "ae7b9bfc-9d5c-48f9-9326-1ae9032756bc",
+          "publishedAssetId": "79578482892817",
+          "jobId": "b2a39c7c-05d8-4f8a-b646-b69878e5dd30",
+          "boundingBox": [
+            4.26,
+            4.0,
+            2.347
+          ],
+          "meshPartCount": 3,
+          "triangles": 5908,
+          "parts": [
+            {
+              "name": "shoulder shell_geom",
+              "size": [
+                4.26,
+                2.828,
+                2.347
+              ],
+              "meshId": "rbxassetid://119117450380096",
+              "textureId": "rbxassetid://128424945448946",
+              "triangles": 4706
+            },
+            {
+              "name": "mounting pylon_geom",
+              "size": [
+                2.804,
+                3.309,
+                1.574
+              ],
+              "meshId": "rbxassetid://104049572954798",
+              "textureId": "rbxassetid://129971428005226",
+              "triangles": 1152
+            },
+            {
+              "name": "hanging armor plates_geom",
+              "size": [
+                0.327,
+                0.269,
+                0.159
+              ],
+              "meshId": "rbxassetid://119368033357666",
+              "textureId": "rbxassetid://134119353415940",
+              "triangles": 50
+            }
+          ],
+          "evaluation": "REJECTED after the single allowed regeneration: still a torso breastplate with two shoulder pads and a neck hole; the hanging armor plates part collapsed to a 50-triangle fragment. Both candidates preserved. Try single-part generation of one pauldron or generate_procedural_model.",
+          "recordedAt": "2026-10-17T00:33:28+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 79578482892817,
+        "verifiedBy": "InsertService:LoadAsset in Studio; staged MeshIds all found in the loaded model",
+        "placeFile": "NOT_SAVED"
+      }
+    }
+  },
+  "runNotes": {
+    "studio": "Place1 (unsaved, PlaceId 0), separate from the Rojo-synced showroom place",
+    "concurrency": "3 concurrent async jobs produced 1 'Too Many Requests' publish failure; 2 concurrent was stable. wait_job_finished and screen_capture often time out while jobs run, but results still arrive.",
+    "promptLimit": "A ~560 char prompt failed with 'Character limit exceeded'; ~310-350 chars worked.",
+    "metricsSource": "triangles = EditableMesh face count via AssetService:CreateEditableMeshAsync per MeshPart; sizes/bbox from Studio",
+    "placeFile": "Place1 has not been saved; the staging hierarchy exists only in the open Studio session until the user saves it (File > Save to File As). Cloud model assets are verified."
+  }
+}
