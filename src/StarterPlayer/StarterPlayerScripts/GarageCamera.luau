@@ -10,6 +10,7 @@ local GarageCamera = {}
 
 local DEFAULT = { yaw = math.rad(158), pitch = math.rad(12), zoom = 34, focusY = 8.4 }
 local MIN_ZOOM, MAX_ZOOM = 10, 72
+local MAX_CAMERA_HEIGHT = 37
 local MIN_PITCH, MAX_PITCH = math.rad(-10), math.rad(72)
 local SMOOTH = 14 -- higher = snappier
 
@@ -30,6 +31,9 @@ end
 -- that works for every pointer source (real mouse, trackpad, synthetic input) and never
 -- depends on mouse-lock state.
 local lastCursor
+local occlusionParams = RaycastParams.new()
+occlusionParams.FilterType = Enum.RaycastFilterType.Exclude
+occlusionParams.IgnoreWater = true
 local function beginDrag()
     lastCursor = UserInputService:GetMouseLocation()
 end
@@ -46,13 +50,16 @@ function GarageCamera.Reset()
     current.yaw = target.yaw + ((current.yaw - target.yaw + math.pi) % (2 * math.pi) - math.pi)
 end
 
--- Named inspection views (keys 1-5). yaw 180 = straight in front, 90/270 = sides, 0 = rear.
+-- Named inspection views (keys 1-8). yaw 180 = straight in front, 90/270 = sides, 0 = rear.
 local VIEWS = {
     [Enum.KeyCode.One] = { yaw = 158, pitch = 12, zoom = 34, focusY = 8.4 }, -- front three-quarter (default)
-    [Enum.KeyCode.Two] = { yaw = 90, pitch = 6, zoom = 31, focusY = 8.4 }, -- side profile
+    [Enum.KeyCode.Two] = { yaw = 90, pitch = 6, zoom = 31, focusY = 8.4 }, -- side profile (looks toward the west storage area)
     [Enum.KeyCode.Three] = { yaw = 12, pitch = 14, zoom = 27, focusY = 9 }, -- rear reactor / exhaust
     [Enum.KeyCode.Four] = { yaw = 150, pitch = 8, zoom = 16, focusY = 12 }, -- chest / cockpit / shoulder detail
     [Enum.KeyCode.Five] = { yaw = 125, pitch = 5, zoom = 17, focusY = 4 }, -- leg and hydraulic detail
+    [Enum.KeyCode.Six] = { yaw = 158, pitch = 26, zoom = 66, focusY = 14 }, -- full hangar overview
+    [Enum.KeyCode.Seven] = { yaw = 250, pitch = 10, zoom = 50, focusY = 9 }, -- east maintenance area (consoles, transformers)
+    [Enum.KeyCode.Eight] = { yaw = 200, pitch = 34, zoom = 48, focusY = 24 }, -- overhead crane and structure
 }
 
 -- degrees in, smooth transition out
@@ -107,6 +114,10 @@ function GarageCamera.Start(getFocus)
         end
         local camera = workspace.CurrentCamera
         if not camera or not hasFocus then return end
+        local ignore = { workspace:FindFirstChild("IronframeMechs") }
+        local character = game:GetService("Players").LocalPlayer.Character
+        if character then table.insert(ignore, character) end
+        occlusionParams.FilterDescendantsInstances = ignore
 
         if dragging or panning then
             local delta = cursorDelta()
@@ -139,14 +150,26 @@ function GarageCamera.Start(getFocus)
             math.cos(current.yaw) * math.cos(current.pitch)
         ) * current.zoom
         local position = look + offset
-        position = Vector3.new(position.X, math.max(position.Y, 0.8), position.Z) -- stay above the floor
+        -- Stay above the floor and below the hangar roof trusses (bottom of purlins is y = 38).
+        position = Vector3.new(position.X, math.clamp(position.Y, 0.8, MAX_CAMERA_HEIGHT), position.Z)
+        -- Slide the framing right so the mech clears the left-hand stats panel on wide screens. Applied to both
+        -- ends of the camera ray so the occlusion test below sees the final camera position.
+        local shift = if camera.ViewportSize.X > 900 then current.zoom * 0.1 else 0
+        local right = CFrame.lookAt(position, look).RightVector * -shift
+        look += right
+        position += right
+        -- Pull the camera in when hangar structure (walls, columns, ceiling: CanQuery parts) is in the way.
+        -- Decorative props are CanQuery=false and never obstruct.
+        local toCamera = position - look
+        local hit = workspace:Raycast(look, toCamera, occlusionParams)
+        if hit then
+            local allowed = math.max((hit.Position - look).Magnitude - 1.2, MIN_ZOOM * 0.6)
+            position = look + toCamera.Unit * allowed
+        end
 
         camera.CameraType = Enum.CameraType.Scriptable
         camera.FieldOfView = 50
-        local cf = CFrame.lookAt(position, look)
-        -- Slide the framing right so the mech clears the left-hand stats panel on wide screens.
-        local shift = if camera.ViewportSize.X > 900 then current.zoom * 0.1 else 0
-        camera.CFrame = cf * CFrame.new(-shift, 0, 0)
+        camera.CFrame = CFrame.lookAt(position, look)
     end)
 end
 

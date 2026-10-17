@@ -103,6 +103,8 @@ local AvatarHider = require(script.Parent:WaitForChild("AvatarHider"))
 local ShowroomAnimator = require(script.Parent:WaitForChild("ShowroomAnimator"))
 
 AvatarHider.Start()
+-- Garage presentation: hide default chat/player list/backpack UI.
+pcall(function() game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.All, false) end)
 ShowroomAnimator.Start()
 GarageCamera.Start(function()
     local folder = workspace:FindFirstChild("IronframeMechs")

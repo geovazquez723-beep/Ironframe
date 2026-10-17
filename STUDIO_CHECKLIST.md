@@ -30,3 +30,12 @@ M03 visual views (keys, with the garage focused)
 - [ ] Armor reads as painted plates with dark gaps over the frame; joint rings are dark metal, not white discs.
 - [ ] No overexposure (white armor) or crushed blacks in any preset; glow limited to visor, canopy, reactor, coils, warheads.
 - [ ] Animation: client-local attribute `ShowroomTorsoYaw` on the mech model changes over time (Explorer, Play client view).
+
+M04B hangar checks
+- [ ] Output: `[IF-ASSET] Loaded 6/6 AI assets from cloud ids`, `SELF-TEST 15 / 15 PASS`, no `[IF-HANGAR]` warnings.
+- [ ] Views `6` overview, `7` east maintenance area, `8` crane/overhead, `2` west area: no camera clipping into walls,
+      columns or ceiling; zoom out + orbit stays inside the hangar.
+- [ ] Bastion remains the brightest, best-separated object at the default view; no overexposed armor.
+- [ ] Six AI asset types visible (lifts, service arms, consoles, cable reels, cabinets, floodlights); the 8 hanging
+      floodlights match the warm key/cool fill on the Bastion.
+- [ ] Presets, safe ejection and rebuild still work; avatar hidden; stats panel and diagnostics unchanged.

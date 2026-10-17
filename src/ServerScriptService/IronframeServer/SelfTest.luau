@@ -11,6 +11,8 @@ local MechRig = require(Shared:WaitForChild("MechRig"))
 local Showroom = require(Shared:WaitForChild("Showroom"))
 local Factory = require(script.Parent.MechFactory)
 local Ejection = require(script.Parent.EjectionSequence)
+local AssetRegistry = require(Shared:WaitForChild("AssetRegistry"))
+local AssetLibrary = require(script.Parent.AssetLibrary)
 
 local SelfTest = {}
 
@@ -185,6 +187,20 @@ test("ejection: stale session never rebuilds but pilot stays safe", function()
         onRebuild = function() rebuilt = true end, isStale = function() return true end,
     }, function(_, fn) fn() end)
     assert(not rebuilt and session.pilotSafe)
+end)
+
+test("asset registry: stable ids, cloud model ids, six accepted assets", function()
+    assert(#AssetRegistry.list == 6, "expected 6 accepted assets, got " .. #AssetRegistry.list)
+    for _, entry in ipairs(AssetRegistry.list) do
+        assert(string.match(entry.id, "^%u%u%u_%d%d%d$"), "bad id " .. entry.id)
+        assert(type(entry.modelAssetId) == "number" and entry.modelAssetId > 0, entry.id .. " lacks a model asset id")
+        assert(AssetRegistry.byId[entry.id] == entry)
+    end
+    assert(AssetRegistry.byId.HNG_001 == nil and AssetRegistry.byId.MEC_001 == nil, "NEEDS_REVIEW/REJECTED assets must not be registered")
+end)
+
+test("asset library: unknown asset is skipped, never substituted", function()
+    assert(AssetLibrary.Place("HNG_999", CFrame.new(), {}) == nil)
 end)
 
 function SelfTest.Run()

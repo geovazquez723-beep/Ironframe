@@ -52,3 +52,8 @@ tools/assetfactory.py           validate | plan | record | set | catalog | loade
 Use 2 concurrent jobs; make the first step a size check (generated bbox ran 40-65% of requested); regenerate
 MEC_001 as a single-part pauldron or with `generate_procedural_model`; ask for taller proportions on the crane hook and
 tool cabinet; consider `partNames` that match PartKit part names (e.g. `PauldronShell`) to ease replacement.
+
+## Runtime use (M04B)
+`python tools/assetfactory.py registry assets/specs/batch_001.json` writes `IronframeShared/AssetRegistry.luau` with the
+ACCEPTED models' cloud ids; the game loads them at start (see README "Milestone 04B"). `batch_001` is integrated with
+HNG_002..HNG_007 (HNG_001 NEEDS_REVIEW and MEC_001 REJECTED are intentionally excluded).
