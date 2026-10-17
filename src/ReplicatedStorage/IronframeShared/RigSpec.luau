@@ -54,9 +54,9 @@ end
 for _, side in ipairs({ { "L", -1 }, { "R", 1 } }) do
     local tag: string, s: number = side[1], side[2]
     -- Digitigrade stance: thigh forward, shin back, foot flat (25 - 50 + 25 = 0).
-    table.insert(joints, { name = "Thigh" .. tag, parent = "Hip", offset = Vector3.new(s * 2.5, -0.5, 0), axis = "X", rest = deg(25), limit = deg(35) })
-    table.insert(joints, { name = "Knee" .. tag, parent = "Thigh" .. tag, offset = Vector3.new(0, -3.6, 0), axis = "X", rest = deg(-50), limit = deg(45) })
-    table.insert(joints, { name = "Ankle" .. tag, parent = "Knee" .. tag, offset = Vector3.new(0, -3.6, 0), axis = "X", rest = deg(25), limit = deg(30) })
+    table.insert(joints, { name = "Thigh" .. tag, parent = "Hip", offset = Vector3.new(s * 2.5, -0.5, 0), axis = "X", rest = deg(25), limit = deg(56) })
+    table.insert(joints, { name = "Knee" .. tag, parent = "Thigh" .. tag, offset = Vector3.new(0, -3.6, 0), axis = "X", rest = deg(-50), limit = deg(62) })
+    table.insert(joints, { name = "Ankle" .. tag, parent = "Knee" .. tag, offset = Vector3.new(0, -3.6, 0), axis = "X", rest = deg(25), limit = deg(68) })
 end
 
 local jointsByName: { [string]: Joint } = {}

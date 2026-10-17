@@ -7,6 +7,7 @@ local Lighting = game:GetService("Lighting")
 local AssetLibrary = require(script.Parent.AssetLibrary)
 local HangarArchitecture = require(script.Parent.HangarArchitecture)
 local HangarDressing = require(script.Parent.HangarDressing)
+local ProvingGround = require(script.Parent.ProvingGround)
 
 local WorldBuilder = {}
 local BAY_WIDTH = 140 -- interior is 124 wide; keeps neighbouring bays' walls apart
@@ -30,7 +31,8 @@ function WorldBuilder.BuildBay(index)
     bay.Parent = workspace:WaitForChild("IronframeHangar")
     HangarArchitecture.Build(bay, origin)
     HangarDressing.Build(bay, origin, AssetLibrary)
-    return Vector3.new(x, 0.45, 0)
+    ProvingGround.Build(bay, origin)
+    return Vector3.new(x, 0.45, 0), bay
 end
 
 function WorldBuilder.Initialize()

@@ -121,17 +121,19 @@ local function doors(b, at)
     for _, s in ipairs({ -1, 1 }) do
         local t = if s < 0 then "L" else "R"
         local cx = s * 10.95
-        part(b, "DoorLeaf" .. t, V3(21.3, 33.5, 2.2), at(cx, 16.75, 55.6), COLOR.gunmetal, METAL, STRUCT)
+        -- M07: every moving piece of a leaf carries BayDoor = "L"/"R". The server only flips CanQuery on the structural leaf;
+        -- clients slide the tagged parts locally (BayClient), so opening costs no per-frame replication.
+        part(b, "DoorLeaf" .. t, V3(21.3, 33.5, 2.2), at(cx, 16.75, 55.6), COLOR.gunmetal, METAL, STRUCT):SetAttribute("BayDoor", t)
         for i = 1, 7 do
-            part(b, "DoorRib" .. t .. i, V3(20.4, 0.9, 0.7), at(cx, 4 + i * 4, 54.3), COLOR.steel, METAL)
+            part(b, "DoorRib" .. t .. i, V3(20.4, 0.9, 0.7), at(cx, 4 + i * 4, 54.3), COLOR.steel, METAL):SetAttribute("BayDoor", t)
         end
         for _, x in ipairs({ -8.5, 0, 8.5 }) do
-            part(b, "DoorStile" .. t, V3(1.0, 33, 0.8), at(cx + x, 16.75, 54.2), COLOR.oliveDark, METAL)
+            part(b, "DoorStile" .. t, V3(1.0, 33, 0.8), at(cx + x, 16.75, 54.2), COLOR.oliveDark, METAL):SetAttribute("BayDoor", t)
         end
-        hazard(b, "DoorHazard" .. t, V3(21.3, 4, 0.2), at(cx, 2, 54.45), Enum.NormalId.Front, 9)
+        hazard(b, "DoorHazard" .. t, V3(21.3, 4, 0.2), at(cx, 2, 54.45), Enum.NormalId.Front, 9):SetAttribute("BayDoor", t)
         part(b, "DoorTrack" .. t, V3(21.3, 0.5, 1.4), at(cx, 0.25, 55.6), COLOR.steel, PLATE)
     end
-    glow(b, "DoorSeamLeak", V3(0.3, 32, 0.4), at(0, 17, 54.3), COLOR.cool, { transparency = 0.55 })
+    glow(b, "DoorSeamLeak", V3(0.3, 32, 0.4), at(0, 17, 54.3), COLOR.cool, { transparency = 0.55 }):SetAttribute("BayDoor", "SEAM")
     -- header beacons and lamps
     for i, x in ipairs({ -16, -8, 8, 16 }) do
         part(b, "BeaconBase" .. i, V3(2.2, 1, 1.6), at(x, 37.2, 54.2), COLOR.black, METAL)
@@ -197,11 +199,17 @@ local function crane(b, at)
     part(b, "Trolley", V3(8, 2.4, 6.4), at(0, 30.2, 6), COLOR.olive, METAL)
     cyl(b, "HoistDrum", "Z", 5.2, 2.6, at(0, 28.6, 6), COLOR.black, METAL)
     cyl(b, "HoistWire", "Y", 12, 0.35, at(0, 22.4, 6), COLOR.black, METAL)
+    b:FindFirstChild("HoistWire"):SetAttribute("CraneHook", true)
     part(b, "HookBlock", V3(3.2, 3, 2.4), at(0, 16.2, 6), COLOR.gunmetal, METAL)
+    b:FindFirstChild("HookBlock"):SetAttribute("CraneHook", true)
     part(b, "HookBlockStripe", V3(3.3, 0.6, 2.5), at(0, 17.2, 6), COLOR.hazardYellow, METAL)
+    b:FindFirstChild("HookBlockStripe"):SetAttribute("CraneHook", true)
     cyl(b, "HookShank", "Y", 2.6, 0.9, at(0, 13.9, 6), COLOR.steel, METAL)
+    b:FindFirstChild("HookShank"):SetAttribute("CraneHook", true)
     part(b, "HookBody", V3(1.2, 1.4, 0.9), at(0, 12.4, 6), COLOR.steel, METAL)
+    b:FindFirstChild("HookBody"):SetAttribute("CraneHook", true)
     part(b, "HookTip", V3(0.8, 0.6, 0.8), at(0.7, 11.6, 6), COLOR.steel, METAL)
+    b:FindFirstChild("HookTip"):SetAttribute("CraneHook", true)
     glow(b, "CraneBeacon", V3(1, 0.8, 1), at(-3.5, 31.8, 6), COLOR.amber)
 end
 
