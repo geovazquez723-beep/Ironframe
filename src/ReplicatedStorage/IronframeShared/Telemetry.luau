@@ -68,6 +68,9 @@ Telemetry.Keys = {
     "heat.level", "integrity.sections", "movement.speed", "targeting.lock", "sensors.contacts",
     "energy.charge", "energy.capacity", "energy.output", "energy.demand", "energy.supply", "energy.capRate",
     "energy.thermal", "energy.propulsion", "energy.deficit", "energy.weaponDemand",
+    -- M09: tactical energy profile and per-subsystem distribution
+    "energy.profile", "energy.profilePending", "energy.profileEta", "energy.profileSerial", "energy.profileReason", "energy.focus",
+    "energy.limited", "energy.weaponRate", "energy.shieldDemand", "energy.sprintDemand",
     "shield.state", "shield.cooldown", "shield.integrity", "shield.reason", "shield.timing",
 }
 

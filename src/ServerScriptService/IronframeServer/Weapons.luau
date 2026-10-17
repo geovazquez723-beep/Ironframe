@@ -7,6 +7,7 @@ local Rig = require(Shared.MechRig)
 local Geometry = require(Shared.WeaponGeometry)
 local Energy = require(Shared.Energy)
 local Targets = require(script.Parent.CombatTargets)
+local EnergySystems = require(script.Parent.EnergySystems)
 local Weapons = {}
 local function enabled(session)
     return session.machineState == "OPERATIONAL" and session.deployment == "ACTIVE" and session.controller ~= nil
@@ -70,7 +71,12 @@ function Weapons.Step(session, effects)
     if s.held then
         local fired = State.Fire(s,socket,now,live,aimValid,function(cost,heat)
             local e = session.power.energy
-            if Energy.Consume(e,cost,false,0) ~= cost then return false end
+            if Energy.Consume(e,cost,false,0,"weapons") ~= cost then
+                -- Distinguish a profile reserve from a genuinely empty capacitor for the cockpit.
+                s.reserved = math.min(e.charge,e.tokens) + 1e-8 >= cost
+                EnergySystems.NoteWeaponLimited(session.power)
+                return false
+            end
             e.thermal = math.clamp(e.thermal + heat,0,session.power.config.thermalMaximum)
             return true
         end)
@@ -87,6 +93,7 @@ function Weapons.Step(session, effects)
             model:SetAttribute("WeaponShotAt",shotAt)
             effects:FireAllClients(model,socket,slot.id,origin,endpoint,result and result.Normal or -direction,damage)
         end
+        if s.reason == "ENERGY LOW" and s.reserved then s.reason = "RESERVED" end
     else s.reason = if not live then "SAFE" elseif not slot then "UNAVAILABLE" elseif slot.reloadAt then "RELOADING" elseif now < slot.nextShot then "COOLDOWN" else "READY" end
     if now-s.publishAt < 0.1 then return end
     s.publishAt = now
@@ -97,7 +104,7 @@ function Weapons.Step(session, effects)
         WeaponMagazine=spec and spec.magazine or 0, WeaponPower=spec and spec.energy/spec.interval or 0,
         WeaponCost=spec and spec.energy or 0, WeaponHeat=spec and spec.heat/spec.interval or 0,
         WeaponCooldown=slot and math.max(0,slot.nextShot-now) or 0, WeaponReload=slot and slot.reloadAt and math.max(0,slot.reloadAt-now) or 0,
-        WeaponAvailable=spec and math.min(session.power.energy.charge,session.power.energy.tokens) >= spec.energy or false,
+        WeaponAvailable=spec and Energy.Available(session.power.energy,"weapons") >= spec.energy or false,
         WeaponShots=s.shots, WeaponHits=s.hits, WeaponLastTarget=s.lastHit, WeaponLastDamage=s.lastDamage,
     }
     for key,value in pairs(values) do if model:GetAttribute(key) ~= value then model:SetAttribute(key,value) end end

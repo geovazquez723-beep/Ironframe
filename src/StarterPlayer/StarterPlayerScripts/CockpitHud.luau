@@ -193,46 +193,126 @@ local function buildStructure(display: Display)
     end
 end
 
--- REACTOR (centre MFD): power, cooling and heat
+-- REACTOR / POWER DISTRIBUTION (centre MFD): profile selector, reactor and capacitor flow, per-subsystem demand
+local PROFILE_ORDER = { "MOBILITY", "BALANCED", "WEAPONS" }
+local PROFILE_TAG = { MOBILITY = "MOB", BALANCED = "BAL", WEAPONS = "WPN" }
+local FOCUS_ROW = { PROPULSION = "prop", WEAPONS = "weapons" }
+
 local function buildReactor(display: Display)
     local c = display.content
-    widgets.reactorName = label(c, "CORE ---", UDim2.fromOffset(20, 10), UDim2.fromOffset(440, 28), { TextSize = 22, TextColor3 = WHITE })
-    local function gauge(key: string, y: number, title: string, color: Color3)
-        label(c, title, UDim2.fromOffset(20, y), UDim2.fromOffset(250, 24), { TextSize = 20, TextColor3 = DIM_TEXT })
-        widgets[key .. "Value"] = label(c, "---", UDim2.fromOffset(190, y), UDim2.fromOffset(270, 24), { TextSize = 20, TextColor3 = WHITE, TextXAlignment = Enum.TextXAlignment.Right })
-        widgets[key .. "Bar"] = bar(c, UDim2.fromOffset(20, y + 30), UDim2.fromOffset(440, 16), 0, color)
+    widgets.reactorName = label(c, "CORE ---", UDim2.fromOffset(20, 4), UDim2.fromOffset(440, 24), { TextSize = 19, TextColor3 = DIM_TEXT })
+    -- Profile selector: three segments (informational here; the clickable strip lives in the HUD overlay).
+    widgets.profSeg = {}
+    for i, id in ipairs(PROFILE_ORDER) do
+        local seg = box(c, UDim2.fromOffset(20 + (i - 1) * 148, 32), UDim2.fromOffset(140, 34), DIM_TEXT, nil, 1.5)
+        local flash = box(seg, UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1), AMBER, 1)
+        flash.ZIndex = 3
+        local text = label(seg, id, UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1), { TextSize = 17, TextColor3 = DIM_TEXT, TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 4 })
+        widgets.profSeg[id] = { frame = seg, stroke = seg:FindFirstChildOfClass("UIStroke"), flash = flash, text = text }
     end
-    gauge("power", 56, "DEMAND / REACTOR u/s", CYAN)
-    gauge("heatGen", 128, "CAPACITOR UNITS", CYAN)
-    gauge("cooling", 200, "THERMAL LOAD %", AMBER)
-    label(c, "SUPPLY / CAP FLOW", UDim2.fromOffset(20, 272), UDim2.fromOffset(250, 24), { TextSize = 20, TextColor3 = DIM_TEXT })
-    widgets.heatStore = label(c, "STANDBY", UDim2.fromOffset(190, 272), UDim2.fromOffset(270, 24), { TextSize = 20, TextColor3 = DIM_TEXT, TextXAlignment = Enum.TextXAlignment.Right })
-    widgets.energyDrive = label(c, "PROPULSION  ---", UDim2.fromOffset(20, 320), UDim2.fromOffset(440, 25), { TextSize = 20, TextColor3 = CYAN })
-    widgets.energyShield = label(c, "SHIELD  ---", UDim2.fromOffset(20, 352), UDim2.fromOffset(440, 25), { TextSize = 20, TextColor3 = CYAN })
-    widgets.energyWarning = label(c, "", UDim2.fromOffset(20, 390), UDim2.fromOffset(440, 48), { TextSize = 18, TextColor3 = AMBER, TextWrapped = true })
+    widgets.profLine = label(c, "PROFILE ---", UDim2.fromOffset(20, 70), UDim2.fromOffset(440, 22), { TextSize = 17, TextColor3 = CYAN })
+    widgets.profBar = bar(c, UDim2.fromOffset(20, 94), UDim2.fromOffset(440, 5), 0, CYAN)
+    local function gauge(key: string, y: number, title: string, color: Color3)
+        label(c, title, UDim2.fromOffset(20, y), UDim2.fromOffset(250, 22), { TextSize = 18, TextColor3 = DIM_TEXT })
+        widgets[key .. "Value"] = label(c, "---", UDim2.fromOffset(190, y), UDim2.fromOffset(270, 22), { TextSize = 18, TextColor3 = WHITE, TextXAlignment = Enum.TextXAlignment.Right })
+        widgets[key .. "Bar"] = bar(c, UDim2.fromOffset(20, y + 24), UDim2.fromOffset(440, 10), 0, color)
+    end
+    gauge("power", 106, "REACTOR  DEMAND / OUTPUT u/s", CYAN)
+    gauge("heatGen", 150, "CAPACITOR", CYAN)
+    widgets.heatStore = label(c, "STANDBY", UDim2.fromOffset(20, 188), UDim2.fromOffset(440, 20), { TextSize = 16, TextColor3 = DIM_TEXT, TextXAlignment = Enum.TextXAlignment.Right })
+    widgets.rows = {}
+    local rows = { { "prop", "PROPULSION" }, { "weapons", "WEAPONS" }, { "shield", "SHIELD" } }
+    for i, row in ipairs(rows) do
+        local y = 212 + (i - 1) * 44
+        label(c, row[2], UDim2.fromOffset(20, y), UDim2.fromOffset(150, 22), { TextSize = 18, TextColor3 = WHITE })
+        local tag = label(c, "", UDim2.fromOffset(160, y), UDim2.fromOffset(180, 22), { TextSize = 15, TextColor3 = CYAN, TextXAlignment = Enum.TextXAlignment.Right })
+        local value = label(c, "---", UDim2.fromOffset(340, y), UDim2.fromOffset(120, 22), { TextSize = 18, TextColor3 = WHITE, TextXAlignment = Enum.TextXAlignment.Right })
+        widgets.rows[row[1]] = { tag = tag, value = value, bar = bar(c, UDim2.fromOffset(20, y + 25), UDim2.fromOffset(440, 8), 0, CYAN) }
+    end
+    gauge("cooling", 346, "THERMAL LOAD %", AMBER)
+    widgets.energyWarning = label(c, "", UDim2.fromOffset(20, 390), UDim2.fromOffset(440, 48), { TextSize = 17, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
     display.refresh = function()
         local m = Telemetry.Value("loadout.metrics", nil)
         local systems = Telemetry.Value("loadout.systems", {})
+        local output = Telemetry.Value("energy.output", 0)
         if m then
             local reactor = Components[systems.reactor or ""]
-            widgets.reactorName.Text = "CORE  " .. string.upper(reactor and reactor.name or "UNKNOWN")
-            local demand, output = Telemetry.Value("energy.demand",0), Telemetry.Value("energy.output",0)
-            local charge, capacity = Telemetry.Value("energy.charge",0), Telemetry.Value("energy.capacity",160)
-            local thermal, deficit = Telemetry.Value("energy.thermal",0), Telemetry.Value("energy.deficit",0)
+            widgets.reactorName.Text = "CORE  " .. string.upper(reactor and reactor.name or "UNKNOWN") .. "   POWER DISTRIBUTION"
+            local demand = Telemetry.Value("energy.demand", 0)
+            local charge, capacity = Telemetry.Value("energy.charge", 0), Telemetry.Value("energy.capacity", 160)
+            local thermal, deficit = Telemetry.Value("energy.thermal", 0), Telemetry.Value("energy.deficit", 0)
             widgets.powerValue.Text = string.format("%.1f / %.1f", demand, output)
-            setBar(widgets.powerBar, demand / math.max(output,1), if demand > output then AMBER else CYAN)
-            widgets.heatGenValue.Text = string.format("%.1f / %.0f", charge, capacity)
-            setBar(widgets.heatGenBar, charge / math.max(capacity,1), if charge < 25 then AMBER else CYAN)
+            setBar(widgets.powerBar, demand / math.max(output, 1), if demand > output then AMBER else CYAN)
+            widgets.heatGenValue.Text = string.format("%.0f / %.0f", charge, capacity)
+            setBar(widgets.heatGenBar, charge / math.max(capacity, 1), if charge < 25 then AMBER else CYAN)
             widgets.coolingValue.Text = string.format("%.1f%%", thermal)
-            setBar(widgets.coolingBar, thermal/100, AMBER)
-            widgets.energyDrive.Text = string.format("PROPULSION %.1f u/s  | SIM %.1f",Telemetry.Value("energy.propulsion",0),Telemetry.Value("energy.weaponDemand",0))
-            widgets.energyShield.Text = string.format("SHIELD %s  %.1fs",Telemetry.Value("shield.state","READY"),Telemetry.Value("shield.cooldown",0))
-            widgets.energyWarning.Text = if deficit > 0.1 then string.format("DEFICIT %.1f u/s / SPRINT LIMITED",deficit) elseif charge < 25 then "SHIELD UNAVAILABLE: CAPACITOR LOW" else Telemetry.Value("shield.reason","READY")
+            setBar(widgets.coolingBar, thermal / 100, AMBER)
+            local flow = Telemetry.Value("energy.capRate", 0)
+            widgets.heatStore.Text = string.format("%s  %+.1f u/s   SUPPLY %.1f", if flow > 0.5 then "CHARGING" elseif flow < -0.5 then "DISCHARGING" else "HOLDING", flow, Telemetry.Value("energy.supply", 0))
+            widgets.heatStore.TextColor3 = if flow < -0.5 then AMBER else CYAN
+            local limited = Telemetry.Value("energy.limited", "")
+            local focus = FOCUS_ROW[Telemetry.Value("energy.focus", "")]
+            local function row(key: string, demandValue: number, name: string, extra: string)
+                local w = widgets.rows[key]
+                w.value.Text = string.format("%.1f u/s", demandValue)
+                local isLimited = string.find(limited, name, 1, true) ~= nil
+                setBar(w.bar, demandValue / math.max(output, 1), if isLimited then AMBER else CYAN)
+                local text, color = extra, CYAN
+                if isLimited then text, color = "LIMITED  " .. extra, AMBER
+                elseif focus == key then text = "PRIORITY  " .. extra end
+                w.tag.Text, w.tag.TextColor3 = text, color
+            end
+            local sprint = Telemetry.Value("energy.sprintDemand", 0)
+            row("prop", Telemetry.Value("energy.propulsion", 0), "SPRINT", if sprint > 0.5 then string.format("SPRINT %.0f", sprint) else "")
+            row("weapons", math.max(Telemetry.Value("energy.weaponRate", 0), Telemetry.Value("energy.weaponDemand", 0)), "WEAPONS", Telemetry.Value("weapons.state", "SAFE"))
+            row("shield", Telemetry.Value("energy.shieldDemand", 0), "SHIELD", Telemetry.Value("shield.state", "READY"))
+            local reason = Telemetry.Value("shield.reason", "READY")
+            widgets.energyWarning.Text = if deficit > 0.1 then string.format("DEFICIT %.1f u/s  /  %s THROTTLED", deficit, if limited ~= "" then limited else "DISCRETIONARY LOADS")
+                elseif limited ~= "" then string.format("%s HELD BY %s PROFILE", limited, Telemetry.Value("energy.profile", "BALANCED"))
+                elseif charge < 25 then "CAPACITOR LOW  /  SHIELD UNAVAILABLE" else reason
         end
-        local capChannel = Telemetry.Get("energy.capRate")
-        widgets.heatStore.Text = if capChannel.value ~= nil then string.format("%.1f / %+.1f",Telemetry.Value("energy.supply",0), capChannel.value) else "STANDBY"
+        local active, pending = Telemetry.Value("energy.profile", nil), Telemetry.Value("energy.profilePending", "")
+        if active then
+            local eta = Telemetry.Value("energy.profileEta", 0)
+            local ack = os.clock() - (widgets.ackAt or -10) < 1.6
+            widgets.profLine.Text = if pending ~= "" then string.format("ALLOCATING  %s  >  %s   %.1fs", active, pending, eta)
+                elseif ack then string.format("ACKNOWLEDGED  /  %s PRIORITY ONLINE", active)
+                else string.format("%s  /  %s", active, Telemetry.Value("energy.profileReason", "ACTIVE"))
+            widgets.profLine.TextColor3 = if pending ~= "" then AMBER else CYAN
+        else widgets.profLine.Text = "PROFILE  STANDBY  /  DEPLOY TO ENABLE" end
         statusTag(display, Telemetry.Get("energy.charge").status)
     end
+end
+
+-- Cheap per-frame segment animation: active glows amber, pending pulses cyan, a switch acknowledges with one soft flash.
+local function animateProfile(t: number)
+    if not widgets.profSeg then return end
+    local active, pending = Telemetry.Value("energy.profile", nil), Telemetry.Value("energy.profilePending", "")
+    local serial = Telemetry.Value("energy.profileSerial", 0)
+    if widgets.lastSerial ~= serial then
+        if widgets.lastSerial ~= nil and serial > 0 then widgets.ackAt = t end
+        widgets.lastSerial = serial
+    end
+    local flash = math.clamp(1 - (t - (widgets.ackAt or -10)) / 0.7, 0, 1)
+    local pulse = 0.5 + 0.5 * math.sin(t * 10)
+    for id, seg in pairs(widgets.profSeg) do
+        if id == active then
+            seg.stroke.Color, seg.text.TextColor3 = AMBER, AMBER
+            seg.stroke.Transparency = 0
+            seg.frame.BackgroundColor3, seg.frame.BackgroundTransparency = AMBER, 0.82
+            seg.flash.BackgroundTransparency = 1 - 0.55 * flash
+        elseif id == pending then
+            seg.stroke.Color, seg.text.TextColor3 = CYAN, CYAN
+            seg.stroke.Transparency = 0.7 - 0.7 * pulse
+            seg.frame.BackgroundTransparency, seg.flash.BackgroundTransparency = 1, 1
+        else
+            seg.stroke.Color, seg.text.TextColor3 = DIM_TEXT, DIM_TEXT
+            seg.stroke.Transparency = 0.35
+            seg.frame.BackgroundTransparency, seg.flash.BackgroundTransparency = 1, 1
+        end
+    end
+    local eta = Telemetry.Value("energy.profileEta", 0)
+    setBar(widgets.profBar, if pending ~= "" then 1 - eta / 0.5 else (if active then 1 else 0), if pending ~= "" then AMBER else CYAN)
 end
 
 -- ARMAMENT (right MFD): hardpoints, groups, ammunition
@@ -431,7 +511,7 @@ local function buildOverlay(playerGui: PlayerGui)
     widgets.evacFrame = warn
 
     -- Hint strip
-    widgets.hint = label(overlay, "V  Garage view     R  Recenter     Mouse / Arrows  Look     LMB Fire  1-6 Hardpoint  T Reload     X  Test ejection     ALT  Free cursor", UDim2.new(0.5, 0, 1, -34), UDim2.fromOffset(1100, 22), { TextSize = 15, TextColor3 = DIM_TEXT, AnchorPoint = Vector2.new(0.5, 0), TextXAlignment = Enum.TextXAlignment.Center })
+    widgets.hint = label(overlay, "V  Garage view     R  Recenter     Mouse / Arrows  Look     LMB Fire  1-6 Hardpoint  T Reload     C  Power profile     X  Test ejection     ALT  Free cursor", UDim2.new(0.5, 0, 1, -34), UDim2.fromOffset(1100, 22), { TextSize = 15, TextColor3 = DIM_TEXT, AnchorPoint = Vector2.new(0.5, 0), TextXAlignment = Enum.TextXAlignment.Center })
 
     -- Fade layer (separate gui so it covers everything, including the garage UI)
     local fadeGui = new("ScreenGui", { Name = "IronframeCockpitFade", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 100 }, playerGui)
@@ -593,10 +673,11 @@ end
 
 -- Per-frame cheap animation: compass tape, radar bearing ring and sweep.
 function Hud.Step(dt: number, t: number)
+    animateProfile(os.clock())
     if widgets.stab then
         widgets.stab.Size = UDim2.fromOffset(600,20)
-        widgets.stab.Text = string.format("%s | %s | HITS %d",Telemetry.Value("weapons.name","WEAPONS SAFE"),Telemetry.Value("weapons.state","SAFE"),Telemetry.Value("weapons.hits",0))
-        widgets.stab.TextColor3 = if Telemetry.Value("weapons.state","") == "ENERGY LOW" then AMBER else CYAN
+        widgets.stab.Text = string.format("%s | %s | HITS %d | PWR %s",Telemetry.Value("weapons.name","WEAPONS SAFE"),Telemetry.Value("weapons.state","SAFE"),Telemetry.Value("weapons.hits",0),PROFILE_TAG[Telemetry.Value("energy.profile","")] or "--")
+        widgets.stab.TextColor3 = if Telemetry.Value("weapons.state","") == "ENERGY LOW" or Telemetry.Value("weapons.state","") == "RESERVED" then AMBER else CYAN
     end
     if widgets.modeLine then
         widgets.modeLine.Text = string.format("%s  /  %s  %.1f st/s  /  %s", Telemetry.Value("deployment.state", "STOWED"), Telemetry.Value("movement.direction", "STOP"), math.abs(Telemetry.Value("movement.speed", 0)), Telemetry.Value("movement.drive", "IDLE"))

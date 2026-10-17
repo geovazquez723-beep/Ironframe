@@ -2,6 +2,7 @@
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("IronframeShared")
 local Energy = require(Shared.Energy)
 local Shield = require(Shared.PulseShield)
+local Profiles = require(Shared.EnergyProfiles)
 local Systems = {}
 Systems.TestPatterns = {
     LASER = { category = "laser", damage = 60, delay = 1.5, rear = false },
@@ -9,8 +10,9 @@ Systems.TestPatterns = {
     PLASMA = { category = "plasma", damage = 60, delay = 1.5, rear = false },
     REAR_MISSILE = { category = "missile", damage = 60, delay = 1.5, rear = true },
 }
-function Systems.Create(model, config)
+function Systems.Create(model, config, profileId)
     return { model = model, config = config, energy = Energy.New(config), shield = Shield.New(config.shield),
+        profile = Profiles.New(profileId), clock = 0, weaponRate = 0, sprintLimitedUntil = -1, weaponLimitedUntil = -1,
         publishAt = -1, published = {}, propulsion = 0, sprintFraction = 0, weaponUntil = 0,
         pending = nil, lastTest = -100, testReport = "H: scheduled impact / J: category / K: weapon load SIM" }
 end
@@ -30,6 +32,11 @@ function Systems.Publish(p, force)
         ShieldIntegrity = rounded(s.integrity), ShieldReason = s.reason, ShieldSerial = s.serial,
         ShieldChargeTime = p.config.shield.chargeTime, ShieldRecoveryTime = p.config.shield.recoveryTime,
         ShieldImpactSerial = s.impactSerial, ShieldPhase = rounded(math.clamp((s.time - s.phaseStart) / math.max(s.phaseEnd - s.phaseStart, 0.001), 0, 1)),
+        EnergyProfile = p.profile.active, EnergyProfilePending = p.profile.pending or "", EnergyProfileEta = rounded(Profiles.Remaining(p.profile, p.clock)),
+        EnergyProfileSerial = p.profile.serial, EnergyProfileReason = p.profile.reason, EnergyFocus = Profiles.Policy(p.profile).focus,
+        EnergyLimited = Systems.Limited(p), EnergyWeaponRate = rounded(p.weaponRate), EnergyShieldDemand = rounded(e.delivered.shield or 0),
+        EnergySprintDemand = rounded(e.delivered.sprint or 0), EnergySprintReserve = rounded(Energy.Reserve(e, "sprint")),
+        EnergyWeaponReserve = rounded(Energy.Reserve(e, "weapons")),
         EnergyTestReport = p.testReport, EnergyTestPending = p.pending ~= nil,
         EnergyTestETA = p.pending and rounded(math.max(0, p.pending.at - s.time)) or 0,
     }
@@ -43,13 +50,43 @@ function Systems.Publish(p, force)
         if p.published[key] ~= value then p.model:SetAttribute(key, value); p.published[key] = value end
     end
 end
+-- Which discretionary subsystem the active profile is currently holding back ("" when nothing is limited).
+function Systems.Limited(p)
+    local parts = {}
+    if p.clock < p.sprintLimitedUntil then table.insert(parts, "SPRINT") end
+    if p.clock < p.weaponLimitedUntil then table.insert(parts, "WEAPONS") end
+    if p.shield.reason == "CAPACITOR LOW" then table.insert(parts, "SHIELD") end
+    return table.concat(parts, "+")
+end
+-- Called by the weapon controller when a funded-looking shot is refused (reserve or empty capacitor).
+function Systems.NoteWeaponLimited(p)
+    p.weaponLimitedUntil = p.clock + 0.6
+end
+-- Server-authoritative profile change: valid id, ACTIVE deployment, transition delay and minimum interval enforced.
+function Systems.RequestProfile(p, id)
+    if p.model:GetAttribute("Deployment") ~= "ACTIVE" then
+        p.profile.reason = "DEPLOY FIRST"
+        Systems.Publish(p, true)
+        return false, "DEPLOY FIRST"
+    end
+    local ok, reason = Profiles.Request(p.profile, id, p.clock)
+    Systems.Publish(p, true)
+    return ok, reason
+end
+-- Every sortie starts from the default policy; thermal state, charge and shield timers are untouched.
+function Systems.ResetProfile(p)
+    p.profile = Profiles.New()
+    p.sprintLimitedUntil, p.weaponLimitedUntil = -1, -1
+    Systems.Publish(p, true)
+end
 function Systems.Activate(p, enabled)
-    local ok = Shield.Activate(p.shield, p.config.shield, function(cost) return Energy.Spend(p.energy, cost) end, enabled)
+    local ok = Shield.Activate(p.shield, p.config.shield, function(cost) return Energy.Spend(p.energy, cost, "shield") end, enabled)
     Systems.Publish(p, true)
     return ok, p.shield.reason
 end
 function Systems.Cancel(p)
     Shield.Cancel(p.shield, p.config.shield)
+    Profiles.Cancel(p.profile)
     p.pending, p.weaponUntil, p.sprintFraction = nil, 0, 0
     Systems.Publish(p, true)
 end
@@ -97,6 +134,9 @@ end
 -- Called at the same bounded substep as locomotion. Request order is priority: idle, basic drive, shield, weapons, sprint.
 function Systems.Step(p, dt, drive, throttle, steer, sprint, enabled)
     local e, s, cfg = p.energy, p.shield, p.config
+    p.clock += math.clamp(dt, 0, 0.25)
+    if Profiles.Update(p.profile, p.clock) then Systems.Publish(p, true) end
+    Energy.SetPolicy(e, Profiles.Policy(p.profile))
     Shield.Advance(s, cfg.shield, dt, enabled)
     local propulsion, boost = 0, 0
     if enabled then
@@ -122,6 +162,11 @@ function Systems.Step(p, dt, drive, throttle, steer, sprint, enabled)
     end
     local base, fraction = Energy.Performance(e, propulsion, boost)
     p.propulsion, p.sprintFraction = propulsion + boost, fraction
+    if boost > 0 and fraction < 0.95 then p.sprintLimitedUntil = p.clock + 0.4 end
+    -- Discrete weapon payments appear as a smoothed rate so the HUD can show weapon demand next to continuous loads.
+    local spent = e.spent.weapons or 0
+    e.spent.weapons = 0
+    if dt > 0 then p.weaponRate += (spent / dt - p.weaponRate) * (1 - math.exp(-dt / 0.35)) end
     Systems.Publish(p)
     return base, fraction
 end

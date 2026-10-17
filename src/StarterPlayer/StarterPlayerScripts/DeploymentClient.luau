@@ -4,6 +4,7 @@ local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Telemetry = require(ReplicatedStorage.IronframeShared.Telemetry)
+local Profiles = require(ReplicatedStorage.IronframeShared.EnergyProfiles)
 local Client = {}
 function Client.Start(remotes, cameraMode, animator)
     local player = Players.LocalPlayer
@@ -34,6 +35,26 @@ function Client.Start(remotes, cameraMode, animator)
         b.MouseButton1Click:Connect(callback)
         return b
     end
+    local function selectProfile(id) remotes.RequestEnergyProfile:FireServer(id) end
+    local function cycleProfile() selectProfile(Profiles.Next(Telemetry.Value("energy.profile", Profiles.Default))) end
+    -- Power-profile strip: always visible while piloting, so profiles never need a memorised shortcut.
+    local strip = Instance.new("Frame")
+    strip.Name, strip.Size, strip.Position = "PowerProfile", UDim2.fromOffset(270, 58), UDim2.new(1, -294, 0, 204)
+    strip.BackgroundColor3, strip.BackgroundTransparency, strip.BorderSizePixel, strip.Parent = Color3.fromRGB(12, 22, 28), 0.15, 0, gui
+    local stripTitle = Instance.new("TextLabel")
+    stripTitle.Name, stripTitle.Size, stripTitle.Position = "Title", UDim2.new(1, -8, 0, 18), UDim2.fromOffset(6, 2)
+    stripTitle.BackgroundTransparency, stripTitle.TextXAlignment, stripTitle.Font, stripTitle.TextSize = 1, Enum.TextXAlignment.Left, Enum.Font.Code, 12
+    stripTitle.TextColor3, stripTitle.Text, stripTitle.Parent = Color3.fromRGB(134, 222, 244), "C  POWER PROFILE", strip
+    local profileButtons = {}
+    for i, id in ipairs(Profiles.Order) do
+        local b = Instance.new("TextButton")
+        b.Name, b.Size, b.Position, b.Text = id, UDim2.fromOffset(84, 30), UDim2.fromOffset(6 + (i - 1) * 88, 22), id
+        b.BackgroundColor3, b.TextColor3, b.Font, b.TextSize, b.AutoButtonColor, b.Parent = Color3.fromRGB(22, 37, 46), Color3.fromRGB(134, 222, 244), Enum.Font.Code, 12, true, strip
+        local stroke = Instance.new("UIStroke")
+        stroke.Thickness, stroke.Color, stroke.Parent = 1.5, Color3.fromRGB(70, 110, 124), b
+        b.MouseButton1Click:Connect(function() selectProfile(id) end)
+        profileButtons[id] = { button = b, stroke = stroke }
+    end
     local shieldButton = smallButton("PulseShield", 122, shield)
     local testButton = smallButton("TestImpact", 162, testImpact)
     local report = Instance.new("TextLabel")
@@ -57,6 +78,7 @@ function Client.Start(remotes, cameraMode, animator)
         if not processed and input.KeyCode == Enum.KeyCode.H then testImpact() end
         if not processed and input.KeyCode == Enum.KeyCode.J then cycleTest() end
         if not processed and input.KeyCode == Enum.KeyCode.K then testWeapon() end
+        if not processed and input.KeyCode == Enum.KeyCode.C then cycleProfile() end
         if not processed and input.KeyCode == Enum.KeyCode.X and cameraMode.Current() ~= "COCKPIT" then
             remotes.RequestTestEject:FireServer()
         end
@@ -94,7 +116,10 @@ function Client.Start(remotes, cameraMode, animator)
             ["energy.charge"] = "EnergyCharge", ["energy.capacity"] = "EnergyCapacity", ["energy.output"] = "EnergyOutput",
             ["energy.demand"] = "EnergyDemand", ["energy.supply"] = "EnergySupply", ["energy.capRate"] = "EnergyCapRate",
             ["energy.thermal"] = "EnergyThermal", ["energy.propulsion"] = "EnergyPropulsion", ["energy.deficit"] = "EnergyDeficit",
-            ["energy.weaponDemand"] = "EnergyWeaponDemand", ["shield.state"] = "ShieldState", ["shield.cooldown"] = "ShieldCooldown",
+            ["energy.weaponDemand"] = "EnergyWeaponDemand", ["energy.profile"] = "EnergyProfile", ["energy.profilePending"] = "EnergyProfilePending",
+            ["energy.profileEta"] = "EnergyProfileEta", ["energy.profileSerial"] = "EnergyProfileSerial", ["energy.profileReason"] = "EnergyProfileReason",
+            ["energy.focus"] = "EnergyFocus", ["energy.limited"] = "EnergyLimited", ["energy.weaponRate"] = "EnergyWeaponRate",
+            ["energy.shieldDemand"] = "EnergyShieldDemand", ["energy.sprintDemand"] = "EnergySprintDemand", ["shield.state"] = "ShieldState", ["shield.cooldown"] = "ShieldCooldown",
             ["shield.integrity"] = "ShieldIntegrity", ["shield.reason"] = "ShieldReason", ["shield.timing"] = "ShieldLastTiming",
         }
         for key, attr in pairs(attributes) do
@@ -102,6 +127,16 @@ function Client.Start(remotes, cameraMode, animator)
             Telemetry.Publish(key, value, if value ~= nil then "LIVE" else "STANDBY")
         end
         local charge, capacity = Telemetry.Value("energy.charge",0), Telemetry.Value("energy.capacity",160)
+        local activeProfile, pendingProfile = Telemetry.Value("energy.profile", ""), Telemetry.Value("energy.profilePending", "")
+        strip.Visible = deployment == "ACTIVE"
+        stripTitle.Text = if pendingProfile ~= "" then string.format("C  POWER PROFILE  >  %s %.1fs", pendingProfile, Telemetry.Value("energy.profileEta", 0))
+            else "C  POWER PROFILE  " .. Telemetry.Value("energy.profileReason", "")
+        for id, entry in pairs(profileButtons) do
+            local on, pend = id == activeProfile, id == pendingProfile
+            entry.stroke.Color = if on then Color3.fromRGB(255, 178, 66) elseif pend then Color3.fromRGB(134, 222, 244) else Color3.fromRGB(70, 110, 124)
+            entry.button.TextColor3 = if on then Color3.fromRGB(255, 178, 66) else Color3.fromRGB(134, 222, 244)
+            entry.button.BackgroundColor3 = if on then Color3.fromRGB(52, 40, 20) else Color3.fromRGB(22, 37, 46)
+        end
         text.Visible = cameraMode.Current() ~= "COCKPIT" and not cameraMode.IsTransitioning()
         local shieldState = Telemetry.Value("shield.state","READY")
         shieldButton.Text = string.format("G  SHIELD %s  %.1fs",shieldState,Telemetry.Value("shield.cooldown",0))
@@ -111,7 +146,7 @@ function Client.Start(remotes, cameraMode, animator)
         report.Text = mech and mech:GetAttribute("EnergyTestReport") or ""
         local eta = mech and mech:GetAttribute("EnergyTestETA") or 0
         if eta > 0 then report.Text ..= string.format("  [%.1fs]",eta) end
-        text.Text = string.format("%s | %s %.1f st/s | HDG %03d | CAP %.0f/%.0f\nTHERMAL %.0f%% | SHIELD %s | %s\nWASD Drive  SHIFT Sprint  V View  X Eject  K Weapon-load SIM", deployment, direction, math.abs(speed), heading,charge,capacity,Telemetry.Value("energy.thermal",0),shieldState,Telemetry.Value("shield.reason",""))
+        text.Text = string.format("%s | %s %.1f st/s | HDG %03d | CAP %.0f/%.0f\nTHERMAL %.0f%% | SHIELD %s | %s\nWASD Drive  SHIFT Sprint  C Profile  V View  X Eject  K Weapon-load SIM", deployment, direction, math.abs(speed), heading,charge,capacity,Telemetry.Value("energy.thermal",0),shieldState,Telemetry.Value("shield.reason",""))
         action.Text = if deployment == "STOWED" then (if cameraMode.Current() == "COCKPIT" then "F  DEPLOY / OPEN DOORS" else "F  ENTER COCKPIT") elseif deployment == "ACTIVE" then "F  RETURN TO HANGAR" else deployment
         local t, s, sprint = axes()
         remotes.DriveInput:FireServer(t, s, sprint)
@@ -125,6 +160,8 @@ function Client.Start(remotes, cameraMode, animator)
         elseif command == "test" then remotes.RequestEnergyTest:FireServer(a or testModes[selected])
         elseif command == "release" then override = nil; remotes.DriveInput:FireServer(0, 0)
         elseif command == "action" then perform()
+        elseif command == "profile" then selectProfile(a)
+        elseif command == "cycleProfile" then cycleProfile()
         elseif command == "return" then remotes.RequestReturn:FireServer()
         elseif command == "eject" then remotes.RequestTestEject:FireServer()
         elseif command == "stats" then return { deployment = deployment, speed = Telemetry.Value("movement.speed"), heading = Telemetry.Value("movement.heading"), charge = Telemetry.Value("energy.charge"), demand = Telemetry.Value("energy.demand"), thermal = Telemetry.Value("energy.thermal"), shield = Telemetry.Value("shield.state"), cooldown = Telemetry.Value("shield.cooldown"), shieldTiming = Telemetry.Value("shield.timing") } end

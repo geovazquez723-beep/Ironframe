@@ -38,6 +38,7 @@ local RequestReturn = remote("RemoteEvent", "RequestReturn")
 local DriveInput = remote("RemoteEvent", "DriveInput") -- (throttle, steer), sanitised and clamped server-side
 local RequestShield = remote("RemoteEvent", "RequestShield")
 local RequestEnergyTest = remote("RemoteEvent", "RequestEnergyTest")
+local RequestEnergyProfile = remote("RemoteEvent", "RequestEnergyProfile") -- (profileId) validated against EnergyProfiles
 
 local WeaponIntent = remote("RemoteEvent", "WeaponIntent")
 local WeaponEffects = remote("RemoteEvent", "WeaponEffects")
@@ -266,6 +267,7 @@ RequestDeploy.OnServerEvent:Connect(function(player)
     Deployment.Transition(session, "DEPLOYING")
     session.controller = Locomotion.Create(session.mech, session.mech:GetAttribute("ChassisId"), session.bayPosition, 0)
     session.controller.energySystems = session.power
+    EnergySystems.ResetProfile(session.power)
     session.deployAt = os.clock() + math.max(Deployment.STARTUP_TIME, BayControl.DOOR_TIME)
     BayControl.SetDoors(session.bay, true)
     setDeploymentAttributes(session)
@@ -312,6 +314,13 @@ RequestShield.OnServerEvent:Connect(function(player)
     if os.clock() - (session.lastShield or -100) < 0.15 then return end
     session.lastShield = os.clock()
     EnergySystems.Activate(session.power, session.deployment == "ACTIVE")
+end)
+RequestEnergyProfile.OnServerEvent:Connect(function(player, profileId)
+    local session = sessions[player]
+    if not session or not session.power or session.deployment ~= "ACTIVE" or session.machineState ~= "OPERATIONAL" then return end
+    if os.clock() - (session.lastProfileRequest or -100) < 0.1 then return end -- packet limit; the real interval lives in EnergyProfiles
+    session.lastProfileRequest = os.clock()
+    EnergySystems.RequestProfile(session.power, profileId)
 end)
 RequestEnergyTest.OnServerEvent:Connect(function(player, patternId)
     local session = sessions[player]

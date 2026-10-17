@@ -5,12 +5,13 @@ local Compiler, Loadouts = require(Shared.LoadoutCompiler), require(Shared.Loado
 local Locomotion, Systems = require(Server.Locomotion), require(Server.EnergySystems)
 local Shield = require(Shared.PulseShield)
 local results = {}
-local function withController(callback, empty)
+-- M09: the default profile (BALANCED) now reserves capacitor charge from sprint; M08A drain assertions use MOBILITY (no sprint reserve).
+local function withController(callback, empty, profile)
     local model = Instance.new("Model")
     model.Name, model.Parent = "M08AIntegrationCheck", workspace.IronframeMechs
     model:SetAttribute("Deployment", "ACTIVE")
     model:SetAttribute("State", "OPERATIONAL")
-    local p = Systems.Create(model, Compiler.Compile(Loadouts.presets.BALANCED).energy)
+    local p = Systems.Create(model, Compiler.Compile(Loadouts.presets.BALANCED).energy, profile)
     if empty then p.energy = require(Shared.Energy).New(p.config,0) end
     local c = Locomotion.Create(model,"IF42_BASTION",Vector3.new(0,0,90),math.pi)
     c.energySystems = p
@@ -37,13 +38,18 @@ results.sprint = withController(function(p,c)
     step(c,120,0,false); step(c,180,0,false)
     assert(p.energy.charge>100 and c.state.speed==0,"idle recovery failed")
     return {peakSpeed=peak,lowCharge=low,recoveredCharge=p.energy.charge}
+end,nil,"MOBILITY")
+results.sprintBalanced = withController(function(p,c)
+    local peak=step(c,180,1,true)
+    assert(peak>16 and p.energy.charge>=47,"balanced sprint breached its 30% capacitor reserve")
+    return {peakSpeed=peak,charge=p.energy.charge}
 end)
 local function sprintReserve(shield)
     return withController(function(p,c)
         if shield then assert(Systems.Activate(p,true)) end
         step(c,96,1,true)
         return p.energy.charge
-    end)
+    end,nil,"MOBILITY")
 end
 results.combined = {sprint=sprintReserve(false),sprintShield=sprintReserve(true)}
 assert(results.combined.sprintShield<results.combined.sprint-20,"shield/sprint did not compete")
@@ -61,7 +67,7 @@ results.empty = withController(function(p,c)
     assert(c.state.speed>5 and p.sprintFraction==0 and p.energy.deficit>0,"starvation immobilized drive or gave free sprint")
     assert(not Systems.Activate(p,true) and p.shield.reason=="CAPACITOR LOW","empty shield activation succeeded")
     return {speed=c.state.speed,deficit=p.energy.deficit,shield=p.shield.reason}
-end,true)
+end,true,"WEAPONS")
 results.thermal = withController(function(p,c,model)
     p.energy.thermal=100
     step(c,60,1,false)
@@ -75,7 +81,7 @@ results.sustain = withController(function(p,c)
     step(c,18,1,true)
     assert(not Shield.Protects(p.shield) and p.shield.reason=="SUSTAIN ENERGY LOW","unfunded shield stayed active")
     return {state=p.shield.state,reason=p.shield.reason,charge=p.energy.charge}
-end)
+end,nil,"MOBILITY") -- MOBILITY serves sprint ahead of shield sustain; BALANCED banks surplus instead (see M09 doc)
 results.defense = {}
 for _,spec in ipairs({{"perfect",12,"laser",-1,58.8},{"ordinary",30,"laser",-1,48},{"plasma",30,"plasma",-1,30},{"rear",12,"missile",1,0}}) do
     results.defense[spec[1]] = withController(function(p,c)
