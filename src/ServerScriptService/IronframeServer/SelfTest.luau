@@ -13,6 +13,8 @@ local Factory = require(script.Parent.MechFactory)
 local Ejection = require(script.Parent.EjectionSequence)
 local AssetRegistry = require(Shared:WaitForChild("AssetRegistry"))
 local AssetLibrary = require(script.Parent.AssetLibrary)
+local Telemetry = require(Shared:WaitForChild("Telemetry"))
+local CockpitConfig = require(Shared:WaitForChild("CockpitConfig"))
 
 local SelfTest = {}
 
@@ -289,6 +291,56 @@ end)
 
 test("asset library: unknown asset is skipped, never substituted", function()
     assert(AssetLibrary.Place("HNG_999", CFrame.new(), {}) == nil)
+end)
+
+test("m06a: rig contract untouched (14 joints, 6 sockets) and Apply exposes the Torso frame", function()
+    assert(#RigSpec.Joints == 14, "joint count changed: " .. #RigSpec.Joints)
+    assert(#RigSpec.SocketOrder == 6, "socket count changed")
+    local model = Factory.Create(1, "BALANCED", Loadouts.presets.BALANCED, Vector3.zero)
+    local world = MechRig.Apply(MechRig.Bind(model), CFrame.new(0, 5, 0), nil)
+    assert(typeof(world.Torso) == "CFrame" and world.Torso.Position.Y > 5, "Apply must return solved joint frames")
+    model:Destroy()
+end)
+
+test("m06a: pilot eye sits inside the torso envelope and head-look limits are sane", function()
+    local eye = CockpitConfig.EYE_OFFSET
+    assert(eye.Y > 3.2 and eye.Y < 5.4 and math.abs(eye.X) < 0.5, "eye not centred in the chest cockpit")
+    assert(eye.Z > CockpitConfig.HIDE_MIN.Z and eye.Z < CockpitConfig.HIDE_MAX.Z, "eye outside the hidden hull box")
+    assert(CockpitConfig.MAX_YAW <= math.rad(80) and CockpitConfig.MAX_PITCH_UP <= math.rad(45) and CockpitConfig.MAX_PITCH_DOWN <= math.rad(45))
+    assert(CockpitConfig.SWAY <= 0.005 and CockpitConfig.VIBRATION <= 0.01, "comfort defaults must stay minimal")
+end)
+
+test("m06a: telemetry bus publishes, rejects bad status and defaults to STANDBY", function()
+    Telemetry.Reset()
+    assert(Telemetry.Get("heat.level").status == "STANDBY" and Telemetry.Value("heat.level", 7) == 7)
+    local seen = 0
+    local disconnect = Telemetry.Subscribe(function() seen += 1 end)
+    Telemetry.Publish("heat.level", 12, "LIVE")
+    Telemetry.Publish("heat.level", 12, "LIVE") -- unchanged: no notification
+    assert(seen == 1 and Telemetry.Value("heat.level") == 12)
+    assert(not pcall(Telemetry.Publish, "heat.level", 1, "BOGUS"))
+    disconnect()
+    Telemetry.Publish("heat.level", 13)
+    assert(seen == 1)
+    Telemetry.Reset()
+end)
+
+test("m06a: cockpit AI assets are replicated read-only when registered", function()
+    local registered = 0
+    for _, entry in ipairs(AssetRegistry.list) do
+        if string.sub(entry.id, 1, 4) == "CPT_" then
+            registered += 1
+        end
+    end
+    local folder = game:GetService("ReplicatedStorage"):FindFirstChild("IronframeCockpitAssets")
+    local replicated = folder and #folder:GetChildren() or 0
+    assert(replicated <= registered, "more cockpit assets replicated than registered")
+    if registered > 0 and AssetLibrary.Has("CPT_001") then
+        assert(replicated >= 1, "registered cockpit assets were not replicated")
+        for _, d in ipairs(folder:GetDescendants()) do
+            assert(not d:IsA("Script") and not d:IsA("LocalScript"), "cockpit asset carries code")
+        end
+    end
 end)
 
 function SelfTest.Run()

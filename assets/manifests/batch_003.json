@@ -1,0 +1,210 @@
+{
+  "batch": "batch_003",
+  "specVersion": 1,
+  "assets": {
+    "CPT_001": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "3255160b-1a75-41b8-b70f-f2e4572b3d26",
+          "publishedAssetId": "120835256980284",
+          "boundingBox": [
+            2.312,
+            0.97,
+            1.8
+          ],
+          "meshPartCount": 2,
+          "triangles": 5734,
+          "parts": [
+            {
+              "name": "dash shell_geom",
+              "size": [
+                2.312,
+                0.97,
+                1.8
+              ],
+              "meshId": "rbxassetid://70812473780074",
+              "textureId": "rbxassetid://73261621050797",
+              "triangles": 5644
+            },
+            {
+              "name": "vents_geom",
+              "size": [
+                0.776,
+                0.231,
+                0.093
+              ],
+              "meshId": "rbxassetid://99255384545236",
+              "textureId": "rbxassetid://84926306939856",
+              "triangles": 90
+            }
+          ],
+          "promptVariant": "v1 spec prompt, explicit parts",
+          "evaluation": "Domed armored hood with raised centre hump, side wings and a vent grille; reads as a dash cowl. Came out 2.3 wide, not the requested 5.0, so it is stretched ~1.6x in X at placement. Model front (vent) faces -Z.",
+          "recordedAt": "2026-10-17T02:12:59+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 120835256980284,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 21/21 AI assets, Replicated 4 cockpit AI assets to clients",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "CPT_002": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "21464830-c153-4c6b-bffd-b2ddd71636d1",
+          "publishedAssetId": "98648100582278",
+          "boundingBox": [
+            1.288,
+            1.3,
+            0.758
+          ],
+          "meshPartCount": 2,
+          "triangles": 5690,
+          "parts": [
+            {
+              "name": "console shell_geom",
+              "size": [
+                1.288,
+                1.3,
+                0.758
+              ],
+              "meshId": "rbxassetid://139464849938664",
+              "textureId": "rbxassetid://114512627858437",
+              "triangles": 5476
+            },
+            {
+              "name": "switch bays_geom",
+              "size": [
+                0.395,
+                0.099,
+                0.223
+              ],
+              "meshId": "rbxassetid://93697138468331",
+              "textureId": "rbxassetid://135288418638002",
+              "triangles": 214
+            }
+          ],
+          "promptVariant": "v1 spec prompt, explicit parts",
+          "evaluation": "Compact cabinet with a small display, switch banks, dials and side conduits. Shorter in Z than requested (0.76 vs 2.6). Used as a cabinet under each wing-console screen, same mesh both sides.",
+          "recordedAt": "2026-10-17T02:12:59+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 98648100582278,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 21/21 AI assets, Replicated 4 cockpit AI assets to clients",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "CPT_003": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "0f463052-a115-41fd-b0a3-cf02b4eff18b",
+          "publishedAssetId": "101095243562356",
+          "boundingBox": [
+            0.515,
+            1.176,
+            0.8
+          ],
+          "meshPartCount": 2,
+          "triangles": 3884,
+          "parts": [
+            {
+              "name": "grip_geom",
+              "size": [
+                0.418,
+                0.664,
+                0.8
+              ],
+              "meshId": "rbxassetid://71783854527063",
+              "textureId": "rbxassetid://98473243740000",
+              "triangles": 3068
+            },
+            {
+              "name": "boot_geom",
+              "size": [
+                0.515,
+                0.865,
+                0.766
+              ],
+              "meshId": "rbxassetid://124061609623063",
+              "textureId": "rbxassetid://110335654152792",
+              "triangles": 816
+            }
+          ],
+          "promptVariant": "v1 spec prompt, explicit parts",
+          "evaluation": "Bell-shaped grip with a swept lever above a ribbed boot; reads as a flight/control stick. Proportions differ from the prompt (short, wide grip).",
+          "recordedAt": "2026-10-17T02:12:59+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 101095243562356,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 21/21 AI assets, Replicated 4 cockpit AI assets to clients",
+        "placeFile": "NOT_REQUIRED"
+      }
+    },
+    "CPT_004": {
+      "status": "ACCEPTED",
+      "retryCount": 0,
+      "attempts": [
+        {
+          "status": "ACCEPTED",
+          "generationId": "af294224-772f-407f-8950-e595e59a13a5",
+          "publishedAssetId": "118381937561102",
+          "boundingBox": [
+            1.41,
+            0.754,
+            1.6
+          ],
+          "meshPartCount": 2,
+          "triangles": 4904,
+          "parts": [
+            {
+              "name": "panel shell_geom",
+              "size": [
+                1.41,
+                0.754,
+                1.595
+              ],
+              "meshId": "rbxassetid://108316685733755",
+              "textureId": "rbxassetid://138073161996028",
+              "triangles": 3508
+            },
+            {
+              "name": "conduits_geom",
+              "size": [
+                1.404,
+                0.154,
+                1.45
+              ],
+              "meshId": "rbxassetid://77997539832322",
+              "textureId": "rbxassetid://101761323377649",
+              "triangles": 1396
+            }
+          ],
+          "promptVariant": "v1 spec prompt, explicit parts",
+          "evaluation": "Shallow panel with rows of round switch bays, a small display and side conduit rolls; clean overhead equipment look. Narrower than requested (1.4 vs 3.4): two units are placed side by side. Front faces -Z.",
+          "recordedAt": "2026-10-17T02:12:59+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 118381937561102,
+        "verifiedBy": "InsertService:LoadAsset at game start in the Rojo-built Ironframe.rbxl (no staging place); log: Loaded 21/21 AI assets, Replicated 4 cockpit AI assets to clients",
+        "placeFile": "NOT_REQUIRED"
+      }
+    }
+  }
+}

@@ -2,6 +2,10 @@
 -- ACCEPTED AI-generated models, keyed by stable asset id. modelAssetId is a cloud model asset that
 -- AssetLibrary loads at runtime (InsertService:LoadAsset); geometry/textures are NOT stored in Git.
 local Registry = {
+    { id = "CPT_001", name = "CockpitDashboardShell", batch = "batch_003", modelAssetId = 120835256980284, bbox = Vector3.new(2.31, 0.97, 1.80), meshParts = 2 },
+    { id = "CPT_002", name = "ControlConsoleHousing", batch = "batch_003", modelAssetId = 98648100582278, bbox = Vector3.new(1.29, 1.30, 0.76), meshParts = 2 },
+    { id = "CPT_003", name = "PilotControlStick", batch = "batch_003", modelAssetId = 101095243562356, bbox = Vector3.new(0.52, 1.18, 0.80), meshParts = 2 },
+    { id = "CPT_004", name = "OverheadEquipmentPanel", batch = "batch_003", modelAssetId = 118381937561102, bbox = Vector3.new(1.41, 0.75, 1.60), meshParts = 2 },
     { id = "HNG_002", name = "HydraulicMaintenanceLift", batch = "batch_001", modelAssetId = 99298219342682, bbox = Vector3.new(4.48, 7.00, 8.07), meshParts = 4 },
     { id = "HNG_003", name = "RoboticServiceArm", batch = "batch_001", modelAssetId = 85087665760063, bbox = Vector3.new(3.60, 9.25, 7.00), meshParts = 5 },
     { id = "HNG_004", name = "DiagnosticConsole", batch = "batch_001", modelAssetId = 126171599709219, bbox = Vector3.new(2.99, 5.00, 2.95), meshParts = 3 },

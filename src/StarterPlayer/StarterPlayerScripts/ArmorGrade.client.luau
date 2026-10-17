@@ -95,7 +95,15 @@ local function onDescendant(descendant: Instance)
     end
 end
 
-mechs.DescendantAdded:Connect(onDescendant)
-for _, descendant in ipairs(mechs:GetDescendants()) do
-    onDescendant(descendant)
+local function watch(container: Instance)
+    container.DescendantAdded:Connect(onDescendant)
+    for _, descendant in ipairs(container:GetDescendants()) do
+        onDescendant(descendant)
+    end
 end
+
+watch(mechs)
+-- M06A: the client-only cockpit interior (parented to Workspace while the pilot is inside) also carries AI meshes.
+task.spawn(function()
+    watch(workspace:WaitForChild("IronframeCockpitClient"))
+end)

@@ -76,6 +76,7 @@ function WorldBuilder.Initialize()
     grade.TintColor = Color3.fromRGB(250, 252, 255)
 
     AssetLibrary.Load()
+    print(string.format("[IF-COCKPIT] Replicated %d cockpit AI assets to clients", AssetLibrary.Publish("CPT_", "IronframeCockpitAssets")))
     print("[IF-STEP-01] Industrial hangar world initialized")
 end
 

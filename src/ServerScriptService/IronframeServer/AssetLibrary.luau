@@ -93,6 +93,25 @@ function AssetLibrary.Load()
     return loaded, failed
 end
 
+-- Copies the cached templates whose ids start with `prefix` into ReplicatedStorage/<folderName>, so clients can build
+-- client-only decoration (the M06A cockpit) from the same accepted cloud assets. Read-only data: no code, anchored parts.
+function AssetLibrary.Publish(prefix, folderName)
+    local folder = ReplicatedStorage:FindFirstChild(folderName)
+    if not folder then
+        folder = Instance.new("Folder")
+        folder.Name = folderName
+        folder.Parent = ReplicatedStorage
+    end
+    local count = 0
+    for _, template in ipairs(cache:GetChildren()) do
+        if string.sub(template.Name, 1, #prefix) == prefix and not folder:FindFirstChild(template.Name) then
+            template:Clone().Parent = folder
+            count += 1
+        end
+    end
+    return count
+end
+
 -- The cached, anchored template model for `id` (nil if it failed to load). Callers must Clone it.
 function AssetLibrary.Template(id)
     return cache:FindFirstChild(id)

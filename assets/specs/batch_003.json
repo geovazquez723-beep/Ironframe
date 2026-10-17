@@ -1,0 +1,83 @@
+{
+  "specVersion": 1,
+  "batch": "batch_003",
+  "style": "Grounded military-industrial battle mech cockpit hardware: dark gunmetal and graphite housings, steel fittings, bolted seams, recessed bays, small amber marks. Machine part, not wearable. No text.",
+  "assets": [
+    {
+      "id": "CPT_001",
+      "category": "cockpit",
+      "name": "CockpitDashboardShell",
+      "prompt": "Heavy armored cockpit dashboard cowl: a wide low sloped hood shell with a raised centre hump, recessed instrument visor lip, vent slots and bolted seams; flat underside; left-right symmetric",
+      "size": {
+        "x": 5.0,
+        "y": 1.0,
+        "z": 1.8
+      },
+      "maxTriangles": 6000,
+      "segmentation": "explicit",
+      "intendedUse": "Client-only decorative cowl over the MFD bank",
+      "rig": "Torso frame; X-symmetric; sloped face toward the pilot (+Z)",
+      "partNames": [
+        "dash shell",
+        "vents"
+      ]
+    },
+    {
+      "id": "CPT_002",
+      "category": "cockpit",
+      "name": "ControlConsoleHousing",
+      "prompt": "Mechanical cockpit control console housing: a chunky angular cabinet with a sloped top panel, recessed switch bays, cable conduits and bolted corners; a single console, machine part",
+      "size": {
+        "x": 1.6,
+        "y": 1.3,
+        "z": 2.6
+      },
+      "maxTriangles": 6000,
+      "segmentation": "explicit",
+      "intendedUse": "Client-only left and right console bodies (same mesh both sides)",
+      "rig": "Torso frame; long axis along Z; sloped top",
+      "partNames": [
+        "console shell",
+        "switch bays"
+      ]
+    },
+    {
+      "id": "CPT_003",
+      "category": "cockpit",
+      "name": "PilotControlStick",
+      "prompt": "Industrial mech pilot control stick: a ribbed gimbal boot base, a steel shaft and an ergonomic grip handle with a thumb hat switch, trigger and buttons; machine part",
+      "size": {
+        "x": 0.8,
+        "y": 1.8,
+        "z": 0.8
+      },
+      "maxTriangles": 4000,
+      "segmentation": "explicit",
+      "intendedUse": "Client-only hand controls",
+      "rig": "Vertical (+Y) shaft, grip faces -Z",
+      "partNames": [
+        "grip",
+        "boot"
+      ]
+    },
+    {
+      "id": "CPT_004",
+      "category": "cockpit",
+      "name": "OverheadEquipmentPanel",
+      "prompt": "Overhead armored cockpit equipment panel: a wide shallow ceiling-mounted box with a sloped front face, rows of switch bays, small vents, conduit tubes and bolted brackets; flat top for mounting",
+      "size": {
+        "x": 3.4,
+        "y": 0.8,
+        "z": 1.6
+      },
+      "maxTriangles": 5000,
+      "segmentation": "explicit",
+      "intendedUse": "Client-only overhead diagnostic panel",
+      "rig": "Flat top mounts to roof; sloped face toward pilot (+Z)",
+      "partNames": [
+        "panel shell",
+        "conduits"
+      ]
+    }
+  ]
+}

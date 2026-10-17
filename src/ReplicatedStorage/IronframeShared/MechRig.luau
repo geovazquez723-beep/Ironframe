@@ -61,7 +61,8 @@ function MechRig.Bind(model: Model): Rig
     return rig
 end
 
-function MechRig.Apply(rig: Rig, rootCF: CFrame, angles: { [string]: number }?)
+-- Returns the solved world frame of every joint (the cockpit camera reads Torso from it).
+function MechRig.Apply(rig: Rig, rootCF: CFrame, angles: { [string]: number }?): { [string]: CFrame }
     local world = MechRig.Solve(rootCF, angles)
     local count = #rig.parts + #rig.linkParts
     local partList: { BasePart } = table.create(count)
@@ -91,6 +92,7 @@ function MechRig.Apply(rig: Rig, rootCF: CFrame, angles: { [string]: number }?)
             part.CFrame = cframes[index]
         end
     end
+    return world
 end
 
 return MechRig

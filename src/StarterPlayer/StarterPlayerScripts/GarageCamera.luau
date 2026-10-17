@@ -20,6 +20,8 @@ local focusPosition = Vector3.new(0, 0, 0)
 local hasFocus = false
 local dragging, panning = false, false
 local pinchBase
+local active = true -- false while the cockpit camera mode owns the camera (single coordinated camera system)
+local lastCF, lastFov = nil, 50
 
 local function clampTarget()
     target.pitch = math.clamp(target.pitch, MIN_PITCH, MAX_PITCH)
@@ -85,6 +87,26 @@ local function mechClearance(point: Vector3): number
     return best
 end
 
+-- Cockpit mode hands the camera over: all garage input is ignored and held drags are released so nothing is stuck
+-- when control returns.
+function GarageCamera.SetActive(value: boolean)
+    active = value
+    if not value then
+        dragging, panning, pinchBase = false, false, nil
+    else
+        lastCursor = nil
+    end
+end
+
+function GarageCamera.IsActive(): boolean
+    return active
+end
+
+-- The camera frame this controller would produce right now (valid even while inactive, for transitions).
+function GarageCamera.GetCFrame(): (CFrame?, number)
+    return lastCF, lastFov
+end
+
 function GarageCamera.Reset()
     target = table.clone(DEFAULT)
     -- Take the short way round so reset never spins the view.
@@ -112,7 +134,7 @@ end
 
 function GarageCamera.Start(getFocus)
     UserInputService.InputBegan:Connect(function(input, processed)
-        if processed then return end
+        if processed or not active then return end
         if input.UserInputType == Enum.UserInputType.MouseButton2 then
             dragging = true
             beginDrag()
@@ -134,6 +156,7 @@ function GarageCamera.Start(getFocus)
         end
     end)
     UserInputService.InputChanged:Connect(function(input, processed)
+        if not active then return end
         if input.UserInputType == Enum.UserInputType.MouseWheel and not processed then
             target.zoom *= 0.9 ^ input.Position.Z
         elseif input.UserInputType == Enum.UserInputType.Touch and not processed and not pinchBase then
@@ -142,6 +165,7 @@ function GarageCamera.Start(getFocus)
         end
     end)
     UserInputService.TouchPinch:Connect(function(_, scale, _, state)
+        if not active then return end
         if state == Enum.UserInputState.Begin then pinchBase = target.zoom end
         if pinchBase then target.zoom = pinchBase / math.max(scale, 0.1) end
         if state == Enum.UserInputState.End then pinchBase = nil end
@@ -160,7 +184,7 @@ function GarageCamera.Start(getFocus)
         if character then table.insert(ignore, character) end
         occlusionParams.FilterDescendantsInstances = ignore
 
-        if dragging or panning then
+        if active and dragging or active and panning then
             local delta = cursorDelta()
             if dragging then
                 target.yaw -= delta.X * 0.0065
@@ -170,9 +194,10 @@ function GarageCamera.Start(getFocus)
             end
         end
         local key = UserInputService.IsKeyDown
-        local turn = (key(UserInputService, Enum.KeyCode.Left) and 1 or 0) - (key(UserInputService, Enum.KeyCode.Right) and 1 or 0)
-        local tilt = (key(UserInputService, Enum.KeyCode.Up) and 1 or 0) - (key(UserInputService, Enum.KeyCode.Down) and 1 or 0)
-        local zoomKey = (key(UserInputService, Enum.KeyCode.Minus) and 1 or 0) - (key(UserInputService, Enum.KeyCode.Equals) and 1 or 0)
+        local keysLive = active -- arrow/zoom keys belong to the cockpit head-look while it owns the camera
+        local turn = not keysLive and 0 or (key(UserInputService, Enum.KeyCode.Left) and 1 or 0) - (key(UserInputService, Enum.KeyCode.Right) and 1 or 0)
+        local tilt = not keysLive and 0 or (key(UserInputService, Enum.KeyCode.Up) and 1 or 0) - (key(UserInputService, Enum.KeyCode.Down) and 1 or 0)
+        local zoomKey = not keysLive and 0 or (key(UserInputService, Enum.KeyCode.Minus) and 1 or 0) - (key(UserInputService, Enum.KeyCode.Equals) and 1 or 0)
         target.yaw += turn * dt * 1.6
         target.pitch += tilt * dt * 0.9
         target.zoom *= 1 + zoomKey * dt * 1.2
@@ -222,9 +247,12 @@ function GarageCamera.Start(getFocus)
             end
         end
 
-        camera.CameraType = Enum.CameraType.Scriptable
-        camera.FieldOfView = 50
-        camera.CFrame = CFrame.lookAt(position, look)
+        lastCF, lastFov = CFrame.lookAt(position, look), 50
+        if active then
+            camera.CameraType = Enum.CameraType.Scriptable
+            camera.FieldOfView = 50
+            camera.CFrame = lastCF
+        end
     end)
 end
 

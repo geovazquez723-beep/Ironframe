@@ -6,6 +6,9 @@ local getState = remotes:WaitForChild("GetGarageState")
 local setPreset = remotes:WaitForChild("SetPreset")
 local requestEject = remotes:WaitForChild("RequestTestEject")
 local stateChanged = remotes:WaitForChild("StateChanged")
+local Shared = ReplicatedStorage:WaitForChild("IronframeShared")
+local Telemetry = require(Shared:WaitForChild("Telemetry"))
+local Loadouts = require(Shared:WaitForChild("Loadouts"))
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "IronframeGarageUI"
@@ -67,7 +70,7 @@ button(panel, "Missile", "MISSILE BARRAGE", UDim2.fromOffset(18, 370), function(
 button(panel, "Eject", "TEST SAFE EJECTION", UDim2.fromOffset(18, 431), function() requestEject:FireServer() end)
 local status = label(panel, "Status", "System nominal", UDim2.fromOffset(288, 25), UDim2.fromOffset(17, 478), Color3.fromRGB(255, 178, 66), 13)
 local diag = label(panel, "Diagnostics", "", UDim2.fromOffset(288, 70), UDim2.fromOffset(17, 508), Color3.fromRGB(140, 200, 160), 12)
-local tip = label(gui, "CameraTip", "RIGHT-DRAG  Orbit  •  MIDDLE-DRAG  Focus height  •  R  Reset view     •     SCROLL  Zoom     •     Ejection always safe", UDim2.new(0.8, 0, 0, 30), UDim2.new(0, 364, 1, -46), Color3.fromRGB(230, 238, 241), 14)
+local tip = label(gui, "CameraTip", "RIGHT-DRAG  Orbit  •  MIDDLE-DRAG  Focus height  •  R  Reset view     •     SCROLL  Zoom     •     V  Cockpit view     •     Ejection always safe", UDim2.new(0.8, 0, 0, 30), UDim2.new(0, 364, 1, -46), Color3.fromRGB(230, 238, 241), 14)
 tip.TextXAlignment = Enum.TextXAlignment.Center
 
 local function display(data)
@@ -76,6 +79,20 @@ local function display(data)
         return
     end
     local m = data.compiled.metrics
+    -- Cockpit telemetry: authoritative server state republished on the bus (LIVE); subsystems that do not exist stay STANDBY.
+    local loadout = Loadouts.presets[data.presetId]
+    Telemetry.Publish("mech.preset", data.presetId)
+    Telemetry.Publish("mech.presetOrder", data.presetOrder)
+    Telemetry.Publish("mech.state", data.machineState)
+    Telemetry.Publish("pilot.safe", data.pilotSafe)
+    Telemetry.Publish("loadout.metrics", m)
+    Telemetry.Publish("loadout.mounts", loadout and loadout.mounts or {})
+    Telemetry.Publish("loadout.systems", loadout and loadout.systems or {})
+    Telemetry.Publish("integrity.total", m.integrity)
+    if data.diagnostics then
+        Telemetry.Publish("diag.tests", data.diagnostics.tests)
+        Telemetry.Publish("diag.rig", data.diagnostics.rig)
+    end
     heading.Text = "IF-42 BASTION\n" .. data.presetName
     stats.Text = string.format(
         "MASS                 %.1f / %.1f t\nPOWER             %.0f / %.0f\nHEAT / COOL      %.1f / %.1f /s\nNOMINAL DPS    %.0f\nINTEGRITY          %.0f\nWEAPONS           %d / 6",
@@ -101,6 +118,7 @@ if ok then display(result) else warn("[IF-CLIENT] GetGarageState failed:", resul
 local GarageCamera = require(script.Parent:WaitForChild("GarageCamera"))
 local AvatarHider = require(script.Parent:WaitForChild("AvatarHider"))
 local ShowroomAnimator = require(script.Parent:WaitForChild("ShowroomAnimator"))
+local CockpitMode = require(script.Parent:WaitForChild("CockpitMode"))
 
 AvatarHider.Start()
 -- Garage presentation: hide default chat/player list/backpack UI.
@@ -112,3 +130,4 @@ GarageCamera.Start(function()
     local base = model and model:GetAttribute("BaseCF")
     return base and base.Position or nil
 end)
+CockpitMode.Start({ garage = GarageCamera, animator = ShowroomAnimator, remotes = remotes })

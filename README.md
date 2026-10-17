@@ -95,3 +95,24 @@ AI-generated armor, cockpit bezel, forearm and weapon meshes now sit on the unch
 `BastionBuilder.FIT` and `WeaponModules.Meshes`; assets are `assets/specs/batch_002.json`. A client script
 (`ArmorGrade`) tints the generated textures to the palette. See `docs/m05/M05_REPORT.md` for the asset log, measurements,
 screenshots and known limitations. `Factory.Create(..., { useAssets = false })` builds the all-procedural mech.
+
+## Milestone 06A (immersive first-person cockpit)
+Stationary pilot-seat simulation inside the garage: press **V** (or click the top-right button) to move between the
+exterior garage camera and a first-person cockpit locked to the animated torso. Full write-up, screenshots and
+verification notes: `docs/m06a/M06A_REPORT.md`.
+
+| Key | Cockpit action |
+| --- | --- |
+| `V` | Switch GARAGE / COCKPIT |
+| Mouse / arrow keys | Limited head-look (yaw +-55 deg, pitch +28 / -32 deg) |
+| `R` | Recenter view |
+| `1`-`6` | Select hardpoint on the armament display |
+| `Q` / `E` | Previous / next loadout preset |
+| `X` | Test safe ejection (same server state machine as the garage button) |
+| `Space` | Skip the startup sequence (first entry only) |
+| `Alt` (hold) | Free the cursor to click UI buttons |
+
+Code map (all client-only except the asset replication): `CockpitMode` (single camera-mode coordinator),
+`CockpitBuilder` (interior geometry), `CockpitHud` (SurfaceGui displays + ScreenGui overlay), `CockpitAudio`,
+`IronframeShared/CockpitConfig` (tunables, comfort/sway) and `IronframeShared/Telemetry` (the bus every instrument reads;
+future systems publish to it). Cockpit AI meshes `CPT_001..004` come from `assets/specs/batch_003.json`.
