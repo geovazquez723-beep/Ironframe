@@ -318,5 +318,57 @@ test("pose amplitudes stay small enough for the pilot camera", function()
     assert(maxDip < 0.3 and maxTorso < math.rad(3) and maxRoll < math.rad(3), string.format("dip %.2f torso %.2f roll %.2f", maxDip, math.deg(maxTorso), math.deg(maxRoll)))
 end)
 
+local Deployment = require("../src/ServerScriptService/IronframeServer/Deployment")
+local Ejection = require("../src/ServerScriptService/IronframeServer/EjectionSequence")
+test("deployment permits exactly the documented transitions", function()
+    local allowed = { STOWED = { DEPLOYING = true, EJECTED = true }, DEPLOYING = { ACTIVE = true, EJECTED = true, STOWED = true }, ACTIVE = { DOCKING = true, EJECTED = true }, DOCKING = { STOWED = true, EJECTED = true }, EJECTED = { STOWED = true } }
+    for _, from in ipairs(Deployment.STATES) do
+        for _, to in ipairs(Deployment.STATES) do
+            assert(Deployment.CanTransition(from, to) == (allowed[from][to] == true), from .. " -> " .. to)
+        end
+    end
+    assert(not Deployment.CanTransition("BAD", "ACTIVE"))
+end)
+test("deployment rejects unsafe, invalid and duplicate deploys", function()
+    local s = { deployment = "STOWED", machineState = "OPERATIONAL", mech = {}, pilotSafe = true, loadout = { systems = { reactor = "core" } } }
+    assert(Deployment.ValidateDeploy(s, { valid = true }))
+    for _, key in ipairs({ "machineState", "mech", "pilotSafe", "loadout" }) do
+        local previous = s[key]; s[key] = nil
+        assert(not Deployment.ValidateDeploy(s, { valid = true }), key)
+        s[key] = previous
+    end
+    assert(not Deployment.ValidateDeploy(s, { valid = false }))
+    assert(Deployment.Transition(s, "DEPLOYING"))
+    assert(not Deployment.ValidateDeploy(s, { valid = true }))
+    assert(not Deployment.AcceptsInput(s.deployment))
+    assert(not Deployment.AllowsLoadoutChange(s.deployment))
+    assert(Deployment.Transition(s, "ACTIVE") and Deployment.AcceptsInput(s.deployment))
+    assert(Deployment.Transition(s, "DOCKING"))
+    assert(Deployment.Transition(s, "STOWED") and Deployment.AllowsLoadoutChange(s.deployment))
+end)
+test("ejection survives failing movement and cleanup hooks and still rebuilds", function()
+    for _, state in ipairs(Deployment.STATES) do
+        local s = { deployment = state, pilotSafe = false }
+        local queue, rebuilt = {}, false
+        Ejection.Run(s, {
+            onPilotSafe = function() assert(s.pilotSafe and not Ejection.IsPilotTargetable(s)); error("drive failure") end,
+            onMechDisabled = function() assert(s.pilotSafe); error("animation failure") end,
+            onCleanup = function() error("visual failure") end,
+            onRebuild = function() rebuilt = true end,
+            isStale = function() return false end,
+        }, function(_, fn) table.insert(queue, fn) end)
+        assert(s.pilotSafe and s.pilotTargetable == false and #queue == 2)
+        for _, callback in ipairs(queue) do callback() end
+        assert(rebuilt)
+    end
+end)
+test("stale ejection never rebuilds a disconnected session", function()
+    local rebuilt = false
+    local s = {}
+    Ejection.Run(s, { onPilotSafe = function() end, onMechDisabled = function() error("stale") end,
+        onCleanup = function() end, onRebuild = function() rebuilt = true end, isStale = function() return true end }, function(_, fn) fn() end)
+    assert(s.pilotSafe and not rebuilt)
+end)
+
 print(string.format("\n%d passed, %d failed", passed, failed))
 if failed > 0 then error("offline tests failed") end

@@ -79,6 +79,12 @@ local function display(data)
         return
     end
     local m = data.compiled.metrics
+    local stowed = data.deployment == nil or data.deployment == "STOWED"
+    for _, name in ipairs({ "Balanced", "Energy", "Missile" }) do
+        panel[name].Active = stowed
+        panel[name].AutoButtonColor = stowed
+        panel[name].TextTransparency = if stowed then 0 else 0.55
+    end
     -- Cockpit telemetry: authoritative server state republished on the bus (LIVE); subsystems that do not exist stay STANDBY.
     local loadout = Loadouts.presets[data.presetId]
     Telemetry.Publish("mech.preset", data.presetId)
@@ -127,7 +133,9 @@ ShowroomAnimator.Start()
 GarageCamera.Start(function()
     local folder = workspace:FindFirstChild("IronframeMechs")
     local model = folder and folder:FindFirstChild(tostring(player.UserId))
-    local base = model and model:GetAttribute("BaseCF")
+    local base = model and ShowroomAnimator.ChassisCF(model)
     return base and base.Position or nil
 end)
 CockpitMode.Start({ garage = GarageCamera, animator = ShowroomAnimator, remotes = remotes })
+require(script.Parent.BayClient).Start()
+require(script.Parent.DeploymentClient).Start(remotes, CockpitMode, ShowroomAnimator)

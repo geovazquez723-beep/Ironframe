@@ -19,7 +19,12 @@ function Ejection.Run(session, hooks, delayFn)
     session.pilotSafe = true
     session.pilotTargetable = false
     session.machineState = "PILOT_EVACUATED"
-    hooks.onPilotSafe()
+    -- Visual/drive failures cannot prevent either cleanup or the guaranteed recovery schedule.
+    local function safely(callback)
+        local ok, err = pcall(callback)
+        if not ok and warn then warn("[IF-EJECTION] hook failed; pilot remains safe: " .. tostring(err)) end
+    end
+    safely(hooks.onPilotSafe)
 
     delayFn(Ejection.DISABLE_DELAY, function()
         if hooks.isStale() then
@@ -27,15 +32,15 @@ function Ejection.Run(session, hooks, delayFn)
         end
         assert(session.pilotSafe == true, "pilot must be safe before mech disable")
         session.machineState = "MECH_DISABLED"
-        hooks.onMechDisabled()
+        safely(hooks.onMechDisabled)
     end)
     delayFn(Ejection.REBUILD_DELAY, function()
-        hooks.onCleanup()
+        safely(hooks.onCleanup)
         if hooks.isStale() then
             return
         end
         session.pilotSafe = true
-        hooks.onRebuild()
+        safely(hooks.onRebuild)
     end)
 end
 

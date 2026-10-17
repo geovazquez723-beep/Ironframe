@@ -326,7 +326,7 @@ local function buildOverhead(display: Display)
     local c = display.content
     local systems = {
         { "REACTOR", "reactor" }, { "COOLING", "cooling" }, { "HYDRAULICS", "hydraulics" }, { "LIFE SUPPORT", "life" },
-        { "EJECTION", "ejection" }, { "LOCOMOTION", "standby" }, { "TARGETING", "standby" }, { "FIRE CONTROL", "standby" },
+        { "EJECTION", "ejection" }, { "LOCOMOTION", "drive" }, { "TARGETING", "standby" }, { "FIRE CONTROL", "standby" },
     }
     widgets.overheadItems = {}
     for i, sys in ipairs(systems) do
@@ -344,6 +344,8 @@ local function buildOverhead(display: Display)
         for _, item in ipairs(widgets.overheadItems) do
             local on = item.kind ~= "standby" and m ~= nil
             item.state.Text = if on then "ONLINE" else "STANDBY"
+            if item.kind == "drive" then item.state.Text = Telemetry.Value("movement.drive", "IDLE") end
+            if item.kind == "reactor" then item.state.Text = Telemetry.Value("reactor.state", "STANDBY") end
             item.state.TextColor3 = if on then CYAN else DIM_TEXT
             item.dot.BackgroundColor3 = if on then CYAN else AMBER
             item.dot.BackgroundTransparency = if on then 0.1 else 0.55
@@ -583,6 +585,9 @@ end
 
 -- Per-frame cheap animation: compass tape, radar bearing ring and sweep.
 function Hud.Step(dt: number, t: number)
+    if widgets.modeLine then
+        widgets.modeLine.Text = string.format("%s  /  %s  %.1f st/s  /  %s", Telemetry.Value("deployment.state", "STOWED"), Telemetry.Value("movement.direction", "STOP"), math.abs(Telemetry.Value("movement.speed", 0)), Telemetry.Value("movement.drive", "IDLE"))
+    end
     if not overlay or not overlay.Enabled then
         return
     end

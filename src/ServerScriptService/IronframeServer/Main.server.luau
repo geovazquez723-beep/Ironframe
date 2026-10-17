@@ -195,6 +195,10 @@ RequestTestEject.OnServerEvent:Connect(function(player)
             print(string.format("[IF-STEP-04] Guaranteed safe ejection for userId %d", player.UserId))
         end,
         onMechDisabled = function()
+            if session.controller then
+                Locomotion.Destroy(session.controller)
+                session.controller = nil
+            end
             if session.mech then
                 session.mech:Destroy()
                 session.mech = nil
@@ -249,10 +253,10 @@ RequestDeploy.OnServerEvent:Connect(function(player)
     end
     Deployment.Transition(session, "DEPLOYING")
     session.controller = Locomotion.Create(session.mech, session.mech:GetAttribute("ChassisId"), session.bayPosition, 0)
-    session.deployAt = os.clock() + Deployment.STARTUP_TIME
+    session.deployAt = os.clock() + math.max(Deployment.STARTUP_TIME, BayControl.DOOR_TIME)
     BayControl.SetDoors(session.bay, true)
     setDeploymentAttributes(session)
-    notify(player, "Reactor starting. Hangar doors opening")
+    notify(player, "Reactor starting. Doors opening behind you (+Z); turn around to exit")
     print(string.format("[IF-DEPLOY] userId %d deploying preset %s", player.UserId, session.presetId))
 end)
 
@@ -262,7 +266,7 @@ RequestReturn.OnServerEvent:Connect(function(player)
     local c = session.controller
     Deployment.Transition(session, "DOCKING")
     c.input.throttle, c.input.steer = 0, 0
-    local inside = c.state.z < 55 and math.abs(c.state.x - session.bayPosition.X) < 60
+    local inside = math.abs(c.state.z - session.bayPosition.Z) < 55 and math.abs(c.state.x - session.bayPosition.X) < 60
     if inside then
         Locomotion.SetAutopilot(c, { x = session.bayPosition.X, z = session.bayPosition.Z, yaw = 0 })
         session.dockUntil = os.clock() + Deployment.DOCK_TIMEOUT
@@ -294,7 +298,7 @@ RunService.Heartbeat:Connect(function(dt)
     local active = 0
     for player, session in pairs(sessions) do
         local c = session.controller
-        if c then
+        if c and session.machineState == "OPERATIONAL" then
             active += 1
             local state = session.deployment
             if state == "DEPLOYING" and session.deployAt and os.clock() >= session.deployAt then

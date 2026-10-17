@@ -53,7 +53,7 @@ function WorldBuilder.Initialize()
 
     -- Enclosed industrial interior: low cool ambient, warm local lights (see HangarDressing), light haze for
     -- depth, restrained bloom so only emissive details bloom.
-    Lighting.ClockTime = 0
+    Lighting.ClockTime = 14
     Lighting.Brightness = 1
     Lighting.ExposureCompensation = 0
     Lighting.Ambient = Color3.fromRGB(42, 50, 64)

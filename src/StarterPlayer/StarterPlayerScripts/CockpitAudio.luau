@@ -116,6 +116,20 @@ function Audio.SetSpool(amount: number)
     spool = amount
 end
 
+function Audio.Footfall(position: Vector3, strength: number)
+    local emitter = Instance.new("Part")
+    emitter.Name, emitter.Size, emitter.Position = "MechanicalFootfall", Vector3.one * 0.1, position
+    emitter.Anchored, emitter.Transparency = true, 1
+    emitter.CanCollide, emitter.CanQuery, emitter.CanTouch = false, false, false
+    emitter.Parent = workspace
+    local sound = Instance.new("Sound")
+    sound.SoundId = FILES.hangar
+    sound.PlaybackSpeed, sound.Volume = 0.6, 0.35 * strength
+    sound.RollOffMaxDistance, sound.Parent = 100, emitter
+    sound:Play()
+    game:GetService("Debris"):AddItem(emitter, 2)
+end
+
 -- Quiet one-shot indicator blip.
 function Audio.Blip(pitch: number?)
     if not container or report.blip == "FAILED" then

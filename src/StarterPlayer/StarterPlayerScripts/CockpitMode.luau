@@ -703,7 +703,7 @@ local function step(dt: number)
     -- Telemetry published by the cockpit itself (10 Hz)
     if t - lastTelemetry > 0.1 and lastTorsoCF and model then
         lastTelemetry = t
-        local baseCF = model:GetAttribute("BaseCF")
+        local baseCF = deps.animator.ChassisCF(model)
         if typeof(baseCF) == "CFrame" then
             local _, yaw = baseCF:ToObjectSpace(lastTorsoCF):ToOrientation()
             Telemetry.Publish("pilot.torsoYaw", math.floor(math.deg(yaw) * 10 + 0.5) / 10, "LIVE")

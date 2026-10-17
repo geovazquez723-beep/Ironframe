@@ -62,7 +62,7 @@ end
 local function marker(parent, at, z, label, side)
     local x = side * 25.5
     part(parent, "MarkerPost", V3(0.7, 7, 0.7), at(x, 3.5, z), COLOR.gunmetal, METAL, SOLID)
-    sign(parent, "MarkerSign", label, V3(5.2, 2.6, 0.3), at(x, 7.6, z) * ANG(0, -side * math.pi / 2, 0), COLOR.black, COLOR.hazardYellow)
+    sign(parent, "MarkerSign", label, V3(5.2, 2.6, 0.3), at(x, 7.6, z) * ANG(0, -side * math.pi / 2, 0), Enum.NormalId.Front, COLOR.black, COLOR.hazardYellow)
     glow(parent, "MarkerLamp", V3(0.9, 0.5, 0.9), at(x, 9.1, z), COLOR.amber)
 end
 

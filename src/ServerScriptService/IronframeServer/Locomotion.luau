@@ -85,7 +85,9 @@ local function makeProbe(p: any)
         local function tilt(a: number, b: number): number
             return math.atan2(math.clamp(a - b, -p.stepUp, p.stepUp), 2 * fp)
         end
-        return center, tilt(front, back), tilt(right, left)
+        -- A wide chassis bridges narrow trenches. Following only the centre ray can drop the swept hull into the floor,
+        -- where Blockcast no longer detects initial overlaps and could let the mech tunnel into an obstacle.
+        return math.max(center, front, back, right, left), tilt(front, back), tilt(right, left)
     end
 
     function probe.blocked(x: number, y: number, z: number, yaw: number): boolean
@@ -99,13 +101,18 @@ local function makeProbe(p: any)
     end
 
     function probe.move(x: number, y: number, z: number, yaw: number, dx: number, dz: number)
+        if not groundAt(x + dx, y, z + dz) then
+            return x, z, 0, 0, 0 -- never step into missing terrain
+        end
         local dir = Vector3.new(dx, 0, dz)
         local length = dir.Magnitude
         if length < 1e-5 then
             return x, z, 1, 0, 0
         end
         local cf = hullCFrame(p, x, y, z, yaw)
-        local hit = workspace:Blockcast(cf, size, dir, rayParams)
+        -- Always cast through the safety skin, even for a tiny acceleration substep. A cast shorter than the gap can
+        -- miss at engine precision, slowly enter the obstacle, and then ignore it as an initial overlap forever.
+        local hit = workspace:Blockcast(cf, size, dir.Unit * (length + Locomotion.SKIN), rayParams)
         if not hit then
             return x + dx, z + dz, 1, 0, 0
         end
@@ -124,7 +131,7 @@ local function makeProbe(p: any)
         local slideLength = slide.Magnitude
         if slideLength > 1e-4 then
             local cf2 = hullCFrame(p, nx, y, nz, yaw)
-            local hit2 = workspace:Blockcast(cf2, size, slide, rayParams)
+            local hit2 = workspace:Blockcast(cf2, size, slide.Unit * (slideLength + Locomotion.SKIN), rayParams)
             local move2 = if hit2 then math.max(hit2.Distance - Locomotion.SKIN, 0) else slideLength
             local f2 = math.min(move2 / slideLength, 1)
             nx, nz = nx + slide.X * f2, nz + slide.Z * f2
