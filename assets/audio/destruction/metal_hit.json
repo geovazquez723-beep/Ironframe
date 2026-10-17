@@ -1,0 +1,19 @@
+{
+  "peak_dbfs": -3.0,
+  "rms_dbfs": -16.96,
+  "crest_db": 13.96,
+  "t30_seconds": 0.224,
+  "clipped_samples": 0,
+  "dc_offset": -0.00049,
+  "file": "assets/audio/destruction/metal_hit.wav",
+  "duration": 0.26,
+  "sample_rate": 44100,
+  "channels": 1,
+  "bits": 16,
+  "sha256": "c22bfe69218031e97fb6dfc01aeedcc428f3810cc3cbf5bc152f8dd815107be9",
+  "source": "Original deterministic synthesis; tools/synthesize_destruction_audio.py",
+  "rights": "Original mathematical synthesis for Ironframe. No third-party samples. CC0-1.0.",
+  "asset_id": "89556137773249",
+  "status": "uploaded_approved_active",
+  "validated_at": "2026-10-17T21:08:02Z"
+}

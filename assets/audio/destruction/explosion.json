@@ -1,0 +1,19 @@
+{
+  "peak_dbfs": -3.0,
+  "rms_dbfs": -15.3,
+  "crest_db": 12.3,
+  "t30_seconds": 1.287,
+  "clipped_samples": 0,
+  "dc_offset": -0.00204,
+  "file": "assets/audio/destruction/explosion.wav",
+  "duration": 1.5,
+  "sample_rate": 44100,
+  "channels": 1,
+  "bits": 16,
+  "sha256": "17f9036ed73f6d25e0689e1f2e9f6f45e10ab177722c816fe9706107c76a86b3",
+  "source": "Original deterministic synthesis; tools/synthesize_destruction_audio.py",
+  "rights": "Original mathematical synthesis for Ironframe. No third-party samples. CC0-1.0.",
+  "asset_id": "98545819452219",
+  "status": "uploaded_approved_active",
+  "validated_at": "2026-10-17T21:30:35Z"
+}

@@ -64,3 +64,12 @@ Fixed pool: eight discharge and four detail voices (no per-shot allocation). Dis
 MG-9/LR-12 keep low 0 / mid -2 dB / high -14 dB, the Mauler uses low +3 / mid -4 / high -20 dB so the cockpit keeps
 structural thump but loses bite. Voices stop on swap, recall and ejection. A weapon whose asset id is empty stays
 silent (no substitute sample, no invented id).
+
+## Destruction audio (M10A)
+Six more original synthesized sounds in `assets/audio/destruction/` (`tools/synthesize_destruction_audio.py`, deterministic, CC0):
+`concrete_hit`, `metal_hit`, `laser_sizzle`, `collapse`, `explosion`, `zap`. Uploaded with `tools/roblox_audio_upload.py upload
+--creator user:3611602826` (moderation lagged a minute or two; `validate` recorded Approved / Active for all six) and registered in
+`IronframeShared/DestructionConfig.audio`. `python tools/synthesize_destruction_audio.py --check` verifies WAV hashes against the
+manifests and the Luau ids against the manifests. Playback: `DestructionFx` voice pool (10 voices, InverseTapered 30..420 studs);
+an empty id stays silent. Not verified: listening judgement, playback in other experiences.
+

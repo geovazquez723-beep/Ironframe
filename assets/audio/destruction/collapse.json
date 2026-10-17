@@ -1,0 +1,19 @@
+{
+  "peak_dbfs": -3.0,
+  "rms_dbfs": -15.04,
+  "crest_db": 12.04,
+  "t30_seconds": 1.512,
+  "clipped_samples": 0,
+  "dc_offset": 0.003563,
+  "file": "assets/audio/destruction/collapse.wav",
+  "duration": 1.7,
+  "sample_rate": 44100,
+  "channels": 1,
+  "bits": 16,
+  "sha256": "bee792d97c5673f43f835da636870d3090f434355d0ec1e2ce05ca58effe35a1",
+  "source": "Original deterministic synthesis; tools/synthesize_destruction_audio.py",
+  "rights": "Original mathematical synthesis for Ironframe. No third-party samples. CC0-1.0.",
+  "asset_id": "110245360489063",
+  "status": "uploaded_approved_active",
+  "validated_at": "2026-10-17T21:08:03Z"
+}

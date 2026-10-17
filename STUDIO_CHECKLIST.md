@@ -39,3 +39,14 @@ M04B hangar checks
 - [ ] Six AI asset types visible (lifts, service arms, consoles, cable reels, cabinets, floodlights); the 8 hanging
       floodlights match the warm key/cool fill on the Bastion.
 - [ ] Presets, safe ejection and rebuild still work; avatar hidden; stats panel and diagnostics unchanged.
+
+M10A destructible proving grounds (see docs/M10A_DESTRUCTIBLE_PROVING_GROUND.md)
+- [ ] `bash tools/check.sh` passes (includes `tools/destruction_tests.luau`); `python tools/synthesize_destruction_audio.py --check` is all `ok`.
+- [ ] Edit mode: run `tools/m10a_studio_checks.luau` through execute_luau (optionally `AssetLibrary.Load()` first): `"failures":[]`.
+- [ ] Play: output shows `[IF-ASSET] Loaded 22/22`; deploy, drive the road to the gate (HDG 180); the left panel `RANGE CONTROL` appears inside the district.
+- [ ] Fire LR-12 (1), HMG-20 (2), MG-9 (3) at barricades / panels / tanks: DAMAGE INFLICTED splits by weapon; Mauler crumbles concrete, MG-9 shreds panels and the engine deck.
+- [ ] A Warehouse A wall breach shows a notice and a real opening; destroying a shed column drops its beam and roof panels.
+- [ ] Track kill stops T-03; turret kill disables the turret; hull kill = VEHICLE DESTROYED; training mech: armor, arm, legs, chassis = TARGET DISABLED.
+- [ ] `B` / RESET ENTIRE DISTRICT restores everything; repeat 3x: `IronframeRangeAudit` `audit` shows identical `instances` and `totalIndexed`.
+- [ ] Return to hangar, redeploy, eject inside the district: pilot safe, capsule untargetable, mech rebuilt; garage, cockpit, loadouts unchanged.
+

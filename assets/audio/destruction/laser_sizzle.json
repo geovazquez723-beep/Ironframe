@@ -1,0 +1,19 @@
+{
+  "peak_dbfs": -3.0,
+  "rms_dbfs": -17.71,
+  "crest_db": 14.71,
+  "t30_seconds": 0.279,
+  "clipped_samples": 0,
+  "dc_offset": -8.4e-05,
+  "file": "assets/audio/destruction/laser_sizzle.wav",
+  "duration": 0.32,
+  "sample_rate": 44100,
+  "channels": 1,
+  "bits": 16,
+  "sha256": "c2899b6a431962cb052681c48aad8f945c25b027987932c8daee8fc6dd0f3eaa",
+  "source": "Original deterministic synthesis; tools/synthesize_destruction_audio.py",
+  "rights": "Original mathematical synthesis for Ironframe. No third-party samples. CC0-1.0.",
+  "asset_id": "125716281003648",
+  "status": "uploaded_approved_active",
+  "validated_at": "2026-10-17T21:08:03Z"
+}

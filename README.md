@@ -116,3 +116,14 @@ Code map (all client-only except the asset replication): `CockpitMode` (single c
 `CockpitBuilder` (interior geometry), `CockpitHud` (SurfaceGui displays + ScreenGui overlay), `CockpitAudio`,
 `IronframeShared/CockpitConfig` (tunables, comfort/sway) and `IronframeShared/Telemetry` (the bus every instrument reads;
 future systems publish to it). Cockpit AI meshes `CPT_001..004` come from `assets/specs/batch_003.json`.
+
+## Milestone 10A (destructible proving grounds)
+A road through a new gate at the end of the proving ground leads into the **Range 07 Destruction Testing District**: 199
+server-authoritative destructible modules (walls with real openings, barricades, containers, fencing, machinery, collapsible
+roofs), three unmanned armored training tanks (AI-skinned, component damage, one patrolling), one stationary training mech and a
+range-control panel with reset. MG-9, LR-12 and HMG-20 use the existing hit path with per-material resistances; effects are pooled
+client-side. Training vehicles are unmanned; the player's mech and pilot take no damage. Write-up, layout, counts, measurements and
+limitations: `docs/M10A_DESTRUCTIBLE_PROVING_GROUND.md`; screenshots in `docs/m10a/`. New keys: **B** reset the district (while
+deployed inside it). Tests: `tools/destruction_tests.luau` (in `tools/check.sh`), `tools/m10a_studio_checks.luau` (Edit mode),
+`tools/m10a_client_scenario.luau` (Play, client).
+

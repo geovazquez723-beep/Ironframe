@@ -1,0 +1,19 @@
+{
+  "peak_dbfs": -3.0,
+  "rms_dbfs": -16.29,
+  "crest_db": 13.29,
+  "t30_seconds": 0.389,
+  "clipped_samples": 0,
+  "dc_offset": -0.000175,
+  "file": "assets/audio/destruction/zap.wav",
+  "duration": 0.45,
+  "sample_rate": 44100,
+  "channels": 1,
+  "bits": 16,
+  "sha256": "abc47066c2ba5ba70ab0dd2f2c3a3f4176efd15abe5a5c9f0c8c28784d21f719",
+  "source": "Original deterministic synthesis; tools/synthesize_destruction_audio.py",
+  "rights": "Original mathematical synthesis for Ironframe. No third-party samples. CC0-1.0.",
+  "asset_id": "123144333775805",
+  "status": "uploaded_approved_active",
+  "validated_at": "2026-10-17T21:30:35Z"
+}

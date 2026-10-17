@@ -1,0 +1,28 @@
+{
+  "specVersion": 1,
+  "batch": "batch_005",
+  "style": "Olive-drab cast and welded armor, dark gunmetal tracks. No figures, no text.",
+  "assets": [
+    {
+      "id": "TNK_001",
+      "category": "vehicle",
+      "name": "TrainingTankSegmented",
+      "prompt": "Heavy main battle tank, complete vehicle: low welded hull with sloped front, two continuous tracks with road wheels, wide sloped cast turret with a long smooth-bore gun and muzzle brake, rear engine deck.",
+      "size": {
+        "x": 16,
+        "y": 9,
+        "z": 28
+      },
+      "maxTriangles": 16000,
+      "segmentation": "explicit",
+      "partNames": [
+        "hull",
+        "turret and gun",
+        "left track",
+        "right track"
+      ],
+      "intendedUse": "Visual skin for the TrainingTank (hull, turret+gun, two tracks); hit geometry, welds and component rules stay procedural and deterministic",
+      "rig": "Gun toward -Z, resting on the ground plane; part pivots are kept relative to the model bounding box"
+    }
+  ]
+}

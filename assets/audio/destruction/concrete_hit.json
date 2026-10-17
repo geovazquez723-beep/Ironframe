@@ -1,0 +1,19 @@
+{
+  "peak_dbfs": -3.0,
+  "rms_dbfs": -15.51,
+  "crest_db": 12.51,
+  "t30_seconds": 0.229,
+  "clipped_samples": 0,
+  "dc_offset": 0.002625,
+  "file": "assets/audio/destruction/concrete_hit.wav",
+  "duration": 0.3,
+  "sample_rate": 44100,
+  "channels": 1,
+  "bits": 16,
+  "sha256": "e33b3b21d812161ff26d407a7cd24d47ac25637970c065cedf1a885113fbe748",
+  "source": "Original deterministic synthesis; tools/synthesize_destruction_audio.py",
+  "rights": "Original mathematical synthesis for Ironframe. No third-party samples. CC0-1.0.",
+  "asset_id": "90380186327747",
+  "status": "uploaded_approved_active",
+  "validated_at": "2026-10-17T21:08:02Z"
+}

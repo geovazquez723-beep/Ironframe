@@ -1,0 +1,127 @@
+{
+  "batch": "batch_005",
+  "specVersion": 1,
+  "assets": {
+    "TNK_001": {
+      "status": "ACCEPTED",
+      "retryCount": 2,
+      "attempts": [
+        {
+          "status": "REJECTED",
+          "generationId": "84d40d2e-007c-44e4-badd-d5ef8af8c8a3",
+          "publishedAssetId": "115772113961712",
+          "boundingBox": [
+            3.569,
+            4.0,
+            5.265
+          ],
+          "meshPartCount": 1,
+          "promptVariant": "turret-and-gun only, segmentation none, size 8x4x22",
+          "evaluation": "The generator ignored 'turret only' and produced a complete small tank as ONE mesh (hull, tracks and turret fused), 3.6 x 5.3 studs instead of 8 x 22, and the baked texture did not load in the editor (flat grey). Cannot be split into components; rejected.",
+          "recordedAt": "2026-10-17T21:06:49+00:00"
+        },
+        {
+          "status": "REJECTED",
+          "generationId": "1546a1f4-dfbf-4f8f-af0b-0bbe66f0c64e",
+          "publishedAssetId": "98929067230026",
+          "boundingBox": [
+            7.414,
+            6.0,
+            10.954
+          ],
+          "meshPartCount": 1,
+          "promptVariant": "lower hull with tracks only, segmentation none, size 18x6x27",
+          "evaluation": "Again a complete textured tank as one fused mesh (7.4 x 11 studs, far under the requested 18 x 27). Good silhouette but no separable turret or tracks, so component damage could not be shown on it. Rejected as a skin; prompt changed to request the complete vehicle with explicit parts.",
+          "recordedAt": "2026-10-17T21:06:49+00:00"
+        },
+        {
+          "status": "ACCEPTED",
+          "generationId": "43447e9d-6fe7-4df3-8a7e-316dff3852c5",
+          "publishedAssetId": "89613907181522",
+          "boundingBox": [
+            11.538,
+            9.0,
+            17.095
+          ],
+          "meshPartCount": 4,
+          "triangles": 15768,
+          "promptVariant": "complete tank, segmentation explicit, partNames hull / turret and gun / left track / right track",
+          "parts": [
+            {
+              "name": "hull_geom",
+              "size": [
+                11.539,
+                4.333,
+                14.216
+              ],
+              "meshId": "rbxassetid://136032002624424",
+              "textureId": "rbxassetid://85789488083928",
+              "triangles": 3370,
+              "center": [
+                0.034,
+                -0.972,
+                1.465
+              ]
+            },
+            {
+              "name": "turret and gun_geom",
+              "size": [
+                8.017,
+                3.833,
+                15.377
+              ],
+              "meshId": "rbxassetid://99527104702414",
+              "textureId": "rbxassetid://134366017962717",
+              "triangles": 3592,
+              "center": [
+                0.026,
+                2.557,
+                -0.834
+              ]
+            },
+            {
+              "name": "left track_geom",
+              "size": [
+                2.247,
+                3.919,
+                13.223
+              ],
+              "meshId": "rbxassetid://73961123198742",
+              "textureId": "rbxassetid://118044329024154",
+              "triangles": 4418,
+              "center": [
+                -4.271,
+                -2.567,
+                1.454
+              ]
+            },
+            {
+              "name": "right track_geom",
+              "size": [
+                2.313,
+                3.913,
+                13.227
+              ],
+              "meshId": "rbxassetid://77623664745474",
+              "textureId": "rbxassetid://113946293468803",
+              "triangles": 4388,
+              "center": [
+                4.342,
+                -2.567,
+                1.448
+              ]
+            }
+          ],
+          "evaluation": "Inspected in Studio next to the proving ground: a convincing four-part tank (hull with glacis, fenders, engine deck; wide cast turret with cupola, bustle and long gun with muzzle brake; two tracks with road wheels and cleats). Came out 11.5 wide x 17.1 long (requested 16 x 28), so it is scaled 1.55x at placement. Gun faces -Z. Palette is a pale olive-grey baked texture; MeshPart.Color does not tint it (as documented in assets/README.md), so wreck states clear the texture and apply a charred colour, and intermediate damage uses server scorch discs. Accepted.",
+          "recordedAt": "2026-10-17T21:06:49+00:00"
+        }
+      ],
+      "persistence": {
+        "state": "CLOUD_VERIFIED",
+        "modelAssetId": 89613907181522,
+        "verifiedBy": "InsertService:LoadAsset in the M10A Rojo-built place (see docs/M10A)",
+        "placeFile": "NOT_REQUIRED"
+      }
+    }
+  }
+}

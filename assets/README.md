@@ -57,3 +57,11 @@ tool cabinet; consider `partNames` that match PartKit part names (e.g. `Pauldron
 `python tools/assetfactory.py registry assets/specs/batch_001.json` writes `IronframeShared/AssetRegistry.luau` with the
 ACCEPTED models' cloud ids; the game loads them at start (see README "Milestone 04B"). `batch_001` is integrated with
 HNG_002..HNG_007 (HNG_001 NEEDS_REVIEW and MEC_001 REJECTED are intentionally excluded).
+
+## Batch 005 (M10A training tank)
+`TNK_001 TrainingTankSegmented` (cloud model `89613907181522`, ACCEPTED, registered). Observed: prompts that say "turret only" or
+"hull only" with `segmentation: none` return a COMPLETE tank fused into one mesh (and only 40-60 % of the requested size); asking for
+the complete vehicle with `segmentation: explicit` and `partNames` ["hull", "turret and gun", "left track", "right track"] gave four
+separable, textured MeshParts (part names arrive as `"hull"_geom` with quotes, so match by fragment). Prompt + style must stay under
+~550 characters (the first two attempts failed with "Character limit exceeded"). MeshPart.Color does not tint the baked texture.
+

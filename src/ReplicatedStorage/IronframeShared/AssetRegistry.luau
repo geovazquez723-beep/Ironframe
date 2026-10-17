@@ -19,6 +19,7 @@ local Registry = {
     { id = "MEC_014", name = "CockpitHousing", batch = "batch_002", modelAssetId = 132078369309729, bbox = Vector3.new(2.21, 2.20, 1.40), meshParts = 1 },
     { id = "MEC_015", name = "UpperLegArmor", batch = "batch_002", modelAssetId = 78068239506823, bbox = Vector3.new(2.07, 3.55, 1.80), meshParts = 1 },
     { id = "MEC_017", name = "ForearmGauntlet", batch = "batch_002", modelAssetId = 100468702861194, bbox = Vector3.new(1.69, 3.80, 1.79), meshParts = 1 },
+    { id = "TNK_001", name = "TrainingTankSegmented", batch = "batch_005", modelAssetId = 89613907181522, bbox = Vector3.new(11.54, 9.00, 17.09), meshParts = 4 },
     { id = "WPN_010", name = "AutocannonVisual", batch = "batch_002", modelAssetId = 135000770234049, bbox = Vector3.new(0.93, 1.80, 2.04), meshParts = 1 },
     { id = "WPN_011", name = "LaserRifleVisual", batch = "batch_002", modelAssetId = 127888942808191, bbox = Vector3.new(0.67, 1.60, 3.43), meshParts = 1 },
     { id = "WPN_012", name = "PlasmaCannonVisual", batch = "batch_002", modelAssetId = 107552381016016, bbox = Vector3.new(2.40, 2.24, 4.14), meshParts = 1 },

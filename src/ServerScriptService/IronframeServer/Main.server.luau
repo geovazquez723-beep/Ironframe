@@ -16,6 +16,8 @@ local EnergySystems = require(script.Parent.EnergySystems)
 
 local Weapons = require(script.Parent.Weapons)
 local CombatTargets = require(script.Parent.CombatTargets)
+local Destructibles = require(script.Parent.Destructibles)
+local RangeControl = require(script.Parent.RangeControl)
 local sessions = {}
 local selfTestResult = { passed = 0, total = 0, failed = {} }
 local bayCounter = 0
@@ -42,6 +44,8 @@ local RequestEnergyProfile = remote("RemoteEvent", "RequestEnergyProfile") -- (p
 
 local WeaponIntent = remote("RemoteEvent", "WeaponIntent")
 local WeaponEffects = remote("RemoteEvent", "WeaponEffects")
+local DestructionFx = remote("RemoteEvent", "DestructionFx") -- M10A: batched cosmetic destruction events (server -> owner)
+local RequestRangeReset = remote("RemoteEvent", "RequestRangeReset") -- M10A: "ALL" | "VEHICLES" | "STRUCTURES"
 
 local function validatePresets()
     local count = 0
@@ -131,6 +135,7 @@ local function assemble(player)
     print(string.format("[IF-STEP-03] Assembled %s for userId %d", session.presetId, player.UserId))
 end
 
+RangeControl.Init(DestructionFx, RequestRangeReset, sessions)
 WorldBuilder.Initialize()
 validatePresets()
 selfTestResult = SelfTest.Run()
@@ -377,6 +382,8 @@ RunService.Heartbeat:Connect(function(dt)
     -- Weapon bursts spend only after all propulsion/shield substeps have settled. No second budget.
     for _, session in pairs(sessions) do Weapons.Step(session,WeaponEffects) end
     CombatTargets.Step(os.clock())
+    Destructibles.Step(os.clock(), dt)
+    RangeControl.Step()
     driveStats.active = active
     if active > 0 then
         driveStats.stepMs += ((os.clock() - started) * 1000 - driveStats.stepMs) * 0.05
@@ -387,6 +394,7 @@ end)
 local function playerAdded(player)
     bayCounter += 1
     local position, bay = WorldBuilder.BuildBay(bayCounter)
+    RangeControl.Attach(player, bay)
     sessions[player] = {
         bayPosition = position,
         bay = bay,
@@ -418,6 +426,7 @@ Players.PlayerRemoving:Connect(function(player)
     if session then
         resetDeployment(session)
         if session.mech then session.mech:Destroy() end
+        RangeControl.Detach(session.bay)
     end
     sessions[player] = nil
 end)

@@ -143,3 +143,6 @@ require(script.Parent.DeploymentClient).Start(remotes, CockpitMode, ShowroomAnim
 require(script.Parent.ShieldClient).Start(ShowroomAnimator)
 
 require(script.Parent.WeaponClient).Start(remotes, CockpitMode, ShowroomAnimator)
+-- M10A: range control panel and client-side destruction effects (cosmetic only; the server decides everything).
+local rangeHud = require(script.Parent.RangeHud).Start(remotes, CockpitMode)
+require(script.Parent.DestructionFx).Start(remotes, rangeHud)

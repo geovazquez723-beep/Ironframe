@@ -7,6 +7,8 @@
 --   z  70..320  field, 136 wide (x = +-68; bays are 140 apart so neighbouring grounds never overlap)
 --   road        44 wide, runs from the door to the far end of the field along x = 0
 --
+-- M10A: the far wall now has a 54-wide gate on the road leading into the Destruction Testing District (DistrictBuilder), which
+-- continues this coordinate frame from z = 321 to z = 700.
 -- Layout for evaluating the machine: a straight road (acceleration, braking, reversing), distance markers every 25 studs,
 -- a road slalom, a container stack and tank farm (collision), a gantry arch to walk through, a low curb (step-over),
 -- two raised areas with ramps (slope handling), and a lit return gate marked HANGAR.
@@ -117,13 +119,18 @@ function ProvingGround.Build(bay: Model, origin: Vector3)
     for _, s in ipairs({ -1, 1 }) do
         wall("PerimeterSide", V3(2, wallHeight, length), at(s * (HW + 1), wallHeight / 2, Z0 + length / 2))
     end
-    wall("PerimeterFar", V3(HW * 2 + 4, wallHeight, 2), at(0, wallHeight / 2, Z1 + 1))
+    -- M10A: the far wall is opened along the road (x = +-27) into the Destruction Testing District (DistrictBuilder).
+    local gateHalf = 27
+    local segment = HW + 2 - gateHalf
+    for _, side in ipairs({ -1, 1 }) do
+        wall("PerimeterFar", V3(segment, wallHeight, 2), at(side * (gateHalf + segment / 2), wallHeight / 2, Z1 + 1))
+    end
     for z = Z0 + 20, Z1, 40 do
         for _, s in ipairs({ -1, 1 }) do
             glow(g, "WallBeacon", V3(0.8, 0.8, 0.8), at(s * (HW - 0.2), wallHeight + 1, z), COLOR.amber)
         end
     end
-    sign(g, "FarSign", "PROVING GROUND  -  END OF RANGE  -  TURN BACK", V3(40, 4, 0.3), at(0, 6, Z1 - 0.2), Enum.NormalId.Back, COLOR.black, COLOR.hazardYellow)
+    sign(g, "FarSign", "STAGING RANGE END\nDISTRICT GATE: ROAD CENTRE", V3(36, 4, 0.3), at(-48, 6, Z1 - 0.2), Enum.NormalId.Back, COLOR.black, COLOR.hazardYellow)
 
     -- Return gate: gantry arch over the road with a sign facing the field ----------------------------------------------------------------
     local gateZ = 88
@@ -182,6 +189,9 @@ function ProvingGround.Build(bay: Model, origin: Vector3)
     -- Broad shallow hill (east): 3.5 studs over 40.
     ramp(g, "HillUpEast", at, 44, -0.1, 296 - 40, 40, 3.6, 40, 1)
     ramp(g, "HillDownEast", at, 44, -0.1, 296 + 0, 40, 3.6, 40, -1)
+
+    -- M10A destructible testing district (server-authoritative; see DistrictBuilder / Destructibles).
+    require(script.Parent.DistrictBuilder).Build(bay, origin, g)
 end
 
 return ProvingGround

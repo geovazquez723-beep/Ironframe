@@ -1,7 +1,11 @@
 -- Membership in this private table, never a client tag, authorizes damage. No Humanoid damage path exists.
 local State = require(game.ReplicatedStorage.IronframeShared.TargetState)
+local Destructibles = require(script.Parent.Destructibles)
 local Targets = {}
 local entries = {}
+-- M10A integration fix: the middle drone used to stand at x = 0, in the middle of the road that now leads to the testing district
+-- (a 9-wide pedestal plus a 12-high body blocks a 14-wide Bastion). The three drones now flank the road (|x| > 30).
+local DRONE_X = { -56, -36, 46 }
 local function publish(part, entry)
     local s = entry.state
     part:SetAttribute("Durability", s.health)
@@ -18,7 +22,7 @@ function Targets.Build(parent, origin)
         model.Name, model.Parent = "MechanicalTarget" .. i, parent
         local part = Instance.new("Part")
         part.Name, part.Size = "RangeDrone" .. i, Vector3.new(7,9,4)
-        part.Position = origin + Vector3.new(-46 + (i-1)*46,12,205)
+        part.Position = origin + Vector3.new(DRONE_X[i],12,205)
         part.Anchored, part.Material = true, Enum.Material.DiamondPlate
         part.Parent = model
         local pedestal = Instance.new("Part")
@@ -38,9 +42,11 @@ function Targets.Build(parent, origin)
         entries[part] = entry; publish(part,entry)
     end
 end
-function Targets.Hit(part, category, damage, now)
+-- `context` (optional) = { weapon = componentId, position, normal }: lets destructible-environment targets apply weapon identity.
+function Targets.Hit(part, category, damage, now, context)
     local entry = entries[part]
-    if not entry or not part:IsDescendantOf(workspace) then return 0 end
+    if not entry then return Destructibles.Hit(part, category, damage, now, context) end
+    if not part:IsDescendantOf(workspace) then return 0 end
     local dealt = State.Hit(entry.state, category, damage, now)
     publish(part,entry)
     return dealt
