@@ -187,4 +187,4 @@ New shared (pure): `Avionics`, `SensorModel`, `ThermalSignature`, `TargetContrac
 
 ## 11. Branch and commits
 
-Branch `feature/m11c-cockpit-avionics`, feature commit `(see git log)` on top of M11B `4eac7b1`. Not pushed, no PR.
+Branch `feature/m11c-cockpit-avionics`, feature commit `73ab270` on top of M11B `4eac7b1`. Not pushed, no PR.
