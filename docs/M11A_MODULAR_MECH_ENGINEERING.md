@@ -83,7 +83,7 @@ and cannot be assembled or deployed.
 **Offline** (`bash tools/check.sh`): offline 28, energy 27, profile 19, weapon 19, presentation 10, destruction 19, combat 43, enemy 57, **loadout 31** (registry and catalog, hardpoint options, deterministic
 compile and no mutation, factory Bastion and ROOK unchanged, reactor / actuator / armour differences against the real `Energy` ledger, `MechDrive` simulation (top speed, acceleration, turn time),
 movement-energy demand, damage composition under both actuators, armour survivability, structure retention through reset, profile arbitration conservation on the new reactor, sustained
-laser fire with weapon heat, request validation with 24 hostile payloads, session-style retention, weapon slots and disabled mounts). `luau-compile` clean for every file, analyzer clean apart from Roblox
+laser fire with weapon heat, request validation with 25 hostile payloads, session-style retention, weapon slots and disabled mounts). `luau-compile` clean for every file, analyzer clean apart from Roblox
 globals, `rojo build` → `build/Ironframe-M11A.rbxl`, Studio self-test 26 / 26.
 
 **Studio Play** (own Studio instance; stages in `tools/m11a_studio_checks.luau`; automated execution, not human play). Installs through the real UI clicks (tab, option, INSTALL, REVERT) and the real remotes; deploy with the real `F`, `F`.
@@ -126,4 +126,4 @@ Is +25 % structure for −7 % speed and +1.5 t a real choice? Does the shallow c
 
 ## 9. Branch and commits
 
-Branch `feature/m11a-modular-engineering`, feature commit: see the next section header once committed. Not pushed, no PR.
+Branch `feature/m11a-modular-engineering`, feature commit `794aa22` (on top of M10C `fee138c`). Not pushed, no PR.
