@@ -172,4 +172,4 @@ caps approach 0.85 / retreat 0.55, flank every 9.5 ± 3 s, cover below 38 % stru
 
 ## 9. Branch and commits
 
-Branch `feature/m10c-autonomous-mech-combat`. Commit hash: see `git log` (recorded in the milestone report message).
+Branch `feature/m10c-autonomous-mech-combat`, feature commit `9ee9ee6` (on top of M10B `adf73c5`). Not pushed, no PR.
