@@ -1,7 +1,7 @@
 # M11B — Physical Combat Fidelity & Mechanical Destruction
 
 Branch `feature/m11b-physical-combat-fidelity` (from M11A `07b1caf`). Local commits only; nothing pushed, no PR.
-Commit: `COMMIT_HASH`.
+Commit: `ed7b313`.
 
 This is a quality milestone: no new weapons, chassis, environments or modes, no weapon accuracy or damage number changed. Shots at a tank
 now land on the armour you can see, different weapons leave different damage, and the machine visibly suffers what the simulation says it has
