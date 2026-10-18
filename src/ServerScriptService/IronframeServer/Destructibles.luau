@@ -54,7 +54,7 @@ function Destructibles.NewDistrict(bay: Model, origin: Vector3, parent: Instance
     folder.Parent = parent
     local d = {
         bay = bay, origin = origin, folder = folder, owner = nil :: Player?,
-        objects = {}, modules = {}, groups = {}, vehicles = {}, mech = nil, wallGroups = 0,
+        objects = {}, modules = {}, groups = {}, vehicles = {}, mech = nil, rook = nil, wallGroups = 0,
         totals = { sections = 0, walls = 0, vehicles = 0, targets = 0 },
         stats = newStats(),
         batch = Batch.New(limits.fxBatchInterval, limits.fxHitsPerBatch, limits.fxMaxEventsPerBatch),
@@ -92,6 +92,10 @@ function Destructibles.DestroyDistrict(d)
         end
     end
     d.objects, d.modules, d.vehicles, d.pending = {}, {}, {}, {}
+    if d.rook and d.rook.model then
+        d.rook.model:Destroy() -- ROOK stands in IronframeMechs, outside the district folder
+    end
+    d.rook = nil
     districts[d.bay] = nil
 end
 
@@ -528,6 +532,8 @@ function Destructibles.Hit(part: BasePart, category: string, damage: number, _no
     local dealt
     if obj.kind == "module" then
         dealt = damageModule(d, obj, class, damage, nil, position, normal)
+    elseif obj.kind == "robot" then
+        dealt = obj.takeHit(d, obj, rec.comp, class, damage, position, normal, context, category)
     else
         dealt = damageComponent(d, obj, rec.comp, class, damage, position, normal)
     end
@@ -542,7 +548,7 @@ function Destructibles.Hit(part: BasePart, category: string, damage: number, _no
     stats.hits += 1
     stats.byClass[class] += dealt
     d.dirty = true
-    local fx = if obj.kind == "module" then obj.def.fx else Config.materials[obj.comps[rec.comp].unit.material].fx
+    local fx = if obj.kind == "module" then obj.def.fx elseif obj.kind == "robot" then obj.hitFx(rec.comp) else Config.materials[obj.comps[rec.comp].unit.material].fx
     emit(d, { t = "h", f = fx, w = class, p = position, n = normal, m = math.floor(dealt * 10) / 10 })
     local splash = Config.splash[class]
     if splash then
@@ -648,11 +654,11 @@ function Destructibles.Reset(d, kind: string): boolean
     if d.destroyed or d.resetting then
         return false
     end
-    if kind ~= "ALL" and kind ~= "VEHICLES" and kind ~= "STRUCTURES" then
+    if kind ~= "ALL" and kind ~= "VEHICLES" and kind ~= "STRUCTURES" and kind ~= "MECH" then
         return false
     end
     local queue = {}
-    if kind ~= "VEHICLES" then
+    if kind ~= "VEHICLES" and kind ~= "MECH" then
         for _, obj in ipairs(d.modules) do
             table.insert(queue, obj)
         end
@@ -663,13 +669,16 @@ function Destructibles.Reset(d, kind: string): boolean
             group.lost, group.breached = 0, false
         end
     end
-    if kind ~= "STRUCTURES" then
+    if kind == "ALL" or kind == "VEHICLES" then
         for _, obj in ipairs(d.vehicles) do
             table.insert(queue, obj)
         end
         if d.mech then
             table.insert(queue, d.mech)
         end
+    end
+    if (kind == "ALL" or kind == "MECH") and d.rook then
+        table.insert(queue, d.rook) -- M10C: ROOK is rebuilt from scratch (fresh brain, energy, magazines, armour)
     end
     d.resetting = { kind = kind, queue = queue, index = 1 }
     Batch.Clear(d.batch)
@@ -707,11 +716,11 @@ local function stepReset(d)
         elseif r.kind == "STRUCTURES" then
             s.sectionsDestroyed, s.wallsBreached, s.collapses = 0, 0, 0
             d.noticed = {}
-        else
+        elseif r.kind == "VEHICLES" then
             s.targetsDisabled, s.vehiclesDestroyed, s.componentsLost = 0, 0, 0
         end
         d.dirty = true
-        Destructibles.Notice(d, if r.kind == "ALL" then "RANGE RESET COMPLETE - ALL TARGETS RESTORED" elseif r.kind == "VEHICLES" then "VEHICLES REPAIRED AND RESPAWNED" else "STRUCTURES RESTORED", nil)
+        Destructibles.Notice(d, if r.kind == "ALL" then "RANGE RESET COMPLETE - ALL TARGETS RESTORED" elseif r.kind == "VEHICLES" then "VEHICLES REPAIRED AND RESPAWNED" elseif r.kind == "MECH" then "ROOK-01 REBUILT - BASTION REPAIRED AND REARMED" else "STRUCTURES RESTORED", nil)
     end
 end
 

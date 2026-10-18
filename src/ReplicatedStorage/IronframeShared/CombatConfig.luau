@@ -7,7 +7,7 @@
 
 local Config = {}
 
-Config.modes = { PASSIVE = "PASSIVE RANGE", ACTIVE = "ACTIVE TRAINING" }
+Config.modes = { PASSIVE = "PASSIVE RANGE", ACTIVE = "ACTIVE TRAINING", MECH = "MECH TRIAL - ROOK-01" } -- MECH: M10C autonomous opponent (EnemyConfig)
 Config.defaultMode = "PASSIVE"
 Config.armDelay = 2.0 -- seconds between ACTIVE TRAINING being selected and the tanks being allowed to acquire targets
 Config.shellWeaponId = "TANK_CANNON" -- registered in DestructionConfig.weaponClassById (HEAVY class against structure)

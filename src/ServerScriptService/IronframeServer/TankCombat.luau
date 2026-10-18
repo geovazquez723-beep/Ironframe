@@ -21,7 +21,9 @@ local Config = require(Shared:WaitForChild("CombatConfig"))
 local Math = require(Shared:WaitForChild("CombatMath"))
 local MechDamage = require(Shared:WaitForChild("MechDamage"))
 local Brain = require(Shared:WaitForChild("TankBrain"))
+local EnemyConfig = require(Shared:WaitForChild("EnemyConfig"))
 local Destructibles = require(script.Parent.Destructibles)
+local EnemyMech = require(script.Parent.EnemyMech) -- M10C
 local TrainingTank = require(script.Parent.TrainingTank)
 local Locomotion = require(script.Parent.Locomotion)
 local EnergySystems = require(script.Parent.EnergySystems)
@@ -36,7 +38,7 @@ local RECOIL_TIME = 0.6
 local TURRET_WRITE = 0.05 -- seconds between turret weld writes while tracking (20 Hz)
 local BOUNDS = { minZ = 300, maxZ = 720, halfX = 92, minY = -30, maxY = 160 } -- bay-local limits of the district for shells
 
-local env: { sessions: { [Player]: any }, fx: RemoteEvent } = nil :: any
+local env: { sessions: { [Player]: any }, fx: RemoteEvent, weaponFx: RemoteEvent? } = nil :: any
 local rng = Random.new(10202)
 
 TankCombat.stats = { aiMs = 0, aiWorst = 0, projMs = 0, projWorst = 0, steps = 0, peakProjectiles = 0, packets = 0, events = 0 }
@@ -47,6 +49,12 @@ params.IgnoreWater = true
 
 function TankCombat.Init(options)
     env = options
+    -- M10C: ROOK fires through this module's swept-projectile manager and the shared weapon-effect remote.
+    EnemyMech.Init({
+        spawnBolt = function(d, spec) return TankCombat.SpawnBolt(d, spec) end,
+        weaponFx = options.weaponFx,
+        cancelBolts = function(d, rook) TankCombat.CancelFrom(d, rook.def.callsign) end,
+    })
 end
 
 local function newCombat(d)
@@ -209,6 +217,33 @@ local function spawnShell(d, c, tank, dir: Vector3, origin: Vector3, aimDistance
     return p
 end
 
+-- M10C: a round fired by an autonomous mech. Same table shape and same sweep / shield / damage resolution as a tank shell.
+--   spec = { source, arch, weaponKey, origin, dir, speed, radius, life, damage, structure, category, weaponId }
+function TankCombat.SpawnBolt(d, spec)
+    local c = combatOf(d)
+    local rooks = 0
+    for _, p in ipairs(c.projectiles) do
+        if p.bolt then
+            rooks += 1
+        end
+    end
+    if rooks >= EnemyConfig.trial.maxBolts or d.resetting then
+        c.stats.suppressed += 1
+        return nil
+    end
+    c.nextId += 1
+    local p = {
+        id = c.nextId, tankId = spec.source, arch = spec.arch, wk = spec.weaponKey, bolt = true, pos = spec.origin, vel = spec.dir * spec.speed,
+        radius = spec.radius, age = 0, life = spec.life, damage = spec.damage, structure = spec.structure, heavy = false, origin = spec.origin,
+        category = spec.category, weaponId = spec.weaponId,
+    }
+    table.insert(c.projectiles, p)
+    c.stats.shots += 1
+    TankCombat.stats.peakProjectiles = math.max(TankCombat.stats.peakProjectiles, #c.projectiles)
+    emit(c, { k = "fire", id = p.id, tank = spec.source, arch = spec.arch, wk = spec.weaponKey, o = spec.origin, v = p.vel, r = p.radius, l = p.life, t = workspace:GetServerTimeNow(), heavy = false })
+    return p
+end
+
 -- Validated discharge: the tank must be intact with an operational turret, the district must not be resetting.
 -- `aim` is the world point the barrel is laid on (lead-corrected by the caller); the shell leaves along the real barrel.
 local function fireShell(d, c, tank, aim: Vector3, now: number, exactAim: boolean?)
@@ -243,13 +278,28 @@ local function fireShell(d, c, tank, aim: Vector3, now: number, exactAim: boolea
 end
 
 local function endShell(c, p, why: string, extra)
-    local e = { k = "end", id = p.id, why = why, p = p.pos, arch = p.arch, heavy = p.heavy, r = p.radius }
+    local e = { k = "end", id = p.id, why = why, p = p.pos, arch = p.arch, heavy = p.heavy, r = p.radius, wk = p.wk }
     if extra then
         for key, value in pairs(extra) do
             e[key] = value
         end
     end
     emit(c, e)
+end
+
+-- Drops everything a given shooter still has in flight (that shooter was disabled or reset).
+function TankCombat.CancelFrom(d, source: string)
+    local c = combatOf(d)
+    local keep = {}
+    for _, p in ipairs(c.projectiles) do
+        if p.tankId == source and p.bolt then
+            endShell(c, p, "CANCEL")
+            c.stats.cancelled += 1
+        else
+            table.insert(keep, p)
+        end
+    end
+    c.projectiles = keep
 end
 
 local function cancelAll(d, c, why: string)
@@ -264,7 +314,7 @@ end
 local function resolveMechHit(d, c, p, target, contact: Vector3, normal: Vector3)
     local session = target.session
     local dir = p.vel.Unit
-    local attack = { category = "ballistic", damage = p.damage, fromX = -dir.X, fromZ = -dir.Z }
+    local attack = { category = p.category or "ballistic", damage = p.damage, fromX = -dir.X, fromZ = -dir.Z }
     local result = session.power and EnergySystems.ResolveImpact(session.power, attack, target.controller.state.yaw)
     local penetrating = if result then result.penetrating else p.damage
     local timing = if result then result.timing else "UNGUARDED"
@@ -342,7 +392,7 @@ local function stepShells(d, c, target, dt: number, now: number)
         elseif worldHit then
             local inst = worldHit.Instance
             p.pos = p.pos + dir * worldHit.Distance
-            Destructibles.Hit(inst, "ballistic", p.structure, now, { weapon = Config.shellWeaponId, position = worldHit.Position, normal = worldHit.Normal })
+            Destructibles.Hit(inst, p.category or "ballistic", p.structure, now, { weapon = p.weaponId or Config.shellWeaponId, position = worldHit.Position, normal = worldHit.Normal, origin = p.origin })
             c.stats.worldHits += 1
             endShell(c, p, "WORLD", { p = worldHit.Position, n = worldHit.Normal })
             done = true
@@ -457,13 +507,17 @@ function TankCombat.SetMode(d, mode: string, reason: string?)
     if not Config.modes[mode] or c.mode == mode then
         return false
     end
+    local previous = c.mode
     c.mode = mode
-    c.armedAt = if mode == "ACTIVE" then os.clock() + Config.armDelay else 0
+    c.armedAt = if mode == "ACTIVE" then os.clock() + Config.armDelay elseif mode == "MECH" then os.clock() + EnemyConfig.trial.armDelay else 0
     cancelAll(d, c, "CANCEL")
+    if mode == "MECH" then
+        EnemyMech.OnTrialStart(d) -- every trial begins against a fresh ROOK
+    end
     d.folder:SetAttribute("CombatMode", mode)
     d.folder:SetAttribute("CombatReason", reason or "")
     d.folder:SetAttribute("CombatModeSerial", (d.folder:GetAttribute("CombatModeSerial") or 0) + 1)
-    Destructibles.Notice(d, if mode == "ACTIVE" then "ACTIVE TRAINING - TANKS ARMING" else "PASSIVE RANGE - TANKS STAND DOWN", nil)
+    Destructibles.Notice(d, if mode == "ACTIVE" then "ACTIVE TRAINING - TANKS ARMING" elseif mode == "MECH" then "MECH TRIAL - ROOK-01 POWERING UP" elseif previous == "MECH" then "PASSIVE RANGE - ROOK-01 STANDING DOWN" else "PASSIVE RANGE - TANKS STAND DOWN", nil)
     return true
 end
 
@@ -472,8 +526,8 @@ end
 function TankCombat.OnReset(d, kind: string)
     local c = combatOf(d)
     cancelAll(d, c, "RESET")
-    c.armedAt = if c.mode == "ACTIVE" then os.clock() + Config.armDelay else 0
-    if kind == "ALL" then
+    c.armedAt = if c.mode == "ACTIVE" then os.clock() + Config.armDelay elseif c.mode == "MECH" then os.clock() + EnemyConfig.trial.armDelay else 0
+    if kind == "ALL" or kind == "MECH" then
         local session = d.owner and env and env.sessions[d.owner]
         if session and session.mech and session.damage then
             BastionDamage.Repair(session)
@@ -484,9 +538,11 @@ function TankCombat.OnReset(d, kind: string)
                 end
             end
         end
-        local stats = c.stats
-        for key in pairs(stats) do
-            stats[key] = 0
+        if kind == "ALL" then
+            local stats = c.stats
+            for key in pairs(stats) do
+                stats[key] = 0
+            end
         end
     end
 end
@@ -516,19 +572,24 @@ function TankCombat.Step(now: number, dt: number)
         if not d.destroyed then
             local c = combatOf(d)
             local target, session, sortieLive = targetOf(d)
-            if c.mode == "ACTIVE" and session and not sortieLive then
-                TankCombat.SetMode(d, "PASSIVE", "sortie ended") -- docking, ejection or core failure ends the training session
+            if c.mode ~= "PASSIVE" and session and not sortieLive then
+                TankCombat.SetMode(d, "PASSIVE", "sortie ended") -- docking, ejection or core failure ends the training session (tanks and ROOK)
             end
             local active = c.mode == "ACTIVE" and now >= c.armedAt
-            d.folder:SetAttribute("CombatArmed", active)
+            local trial = c.mode == "MECH" and now >= c.armedAt
+            d.folder:SetAttribute("CombatArmed", active or trial)
             -- c.holdFire (test equipment only): tanks stand down but shells already in flight keep flying.
             local engage = active and not c.holdFire
             local t0 = os.clock()
             for _, tank in ipairs(d.vehicles) do
                 stepTank(d, c, tank, if engage then target else nil, engage, dt, now)
             end
+            -- M10C: the autonomous mech thinks, moves and fires after the tanks; its rounds fly in the same manager below.
+            if d.rook then
+                EnemyMech.Step(d, c, if c.holdFire then nil else target, trial and not c.holdFire, dt, now)
+            end
             local t1 = os.clock()
-            stepShells(d, c, if active then target else nil, dt, now)
+            stepShells(d, c, if active or trial then target else nil, dt, now)
             local t2 = os.clock()
             aiTime += t1 - t0
             projTime += t2 - t1
@@ -582,7 +643,7 @@ function TankCombat.Audit(d)
         table.insert(shells, { id = p.id, pos = p.pos, age = p.age, arch = p.arch })
     end
     return { mode = c.mode, armed = d.folder:GetAttribute("CombatArmed"), projectiles = #c.projectiles, shells = shells, stats = table.clone(c.stats), tanks = tanks,
-        perf = table.clone(TankCombat.stats), events = #c.events }
+        perf = table.clone(TankCombat.stats), events = #c.events, rook = EnemyMech.Audit(d) }
 end
 
 TankCombat.TargetOf = targetOf

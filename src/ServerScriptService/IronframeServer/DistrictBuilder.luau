@@ -12,6 +12,8 @@
 --   z  552..600  container yard: 9 containers, two tiers        (east)
 --   z  578..602  gantry shed: columns, beams, roof panels       (west, partial-collapse demo)
 --   z  614..654  Warehouse A (west) and Bunker B (east), breachable wall grids and collapsible roofs
+--   z  500..612  MECH TRIAL RING (M10C): the road section between the fuel point and the container yard. Three staggered cover walls
+--                (16 high, destructible) and ROOK-01's station pad at z = 606. ROOK's tactical lattice covers |x| <= 18, z 504..606.
 --   z  692..700  RESERVED duel-arena gate: the logical expansion direction (+Z); nothing is built beyond it
 --
 -- The road continues along x = 0 (44 wide) so the Bastion (14 wide) always has a clear route. Everything destructible is
@@ -20,6 +22,7 @@
 local Destructibles = require(script.Parent.Destructibles)
 local TrainingTank = require(script.Parent.TrainingTank)
 local TrainingMech = require(script.Parent.TrainingMech)
+local EnemyMech = require(script.Parent.EnemyMech)
 local HangarKit = require(script.Parent.HangarKit)
 
 local DistrictBuilder = {}
@@ -494,6 +497,41 @@ local function bunker(ctx)
     generator(ctx, "GeneratorG", V3(52, 0, 634), math.rad(90), machinery)
 end
 
+-- MECH TRIAL RING (M10C): staggered cover walls, ROOK-01's station pad and the signage. The walls are ordinary destructible
+-- modules (wallGrid), so ROOK's line of sight and its navigation lattice follow whatever is still standing.
+local function rookCourt(ctx, g)
+    local d = ctx.d
+    local parent = Instance.new("Model")
+    parent.Name = "RookCourt"
+    parent.Parent = d.folder
+    local rows = {
+        { h = 8, material = "CONCRETE", surface = CONCRETE, color = Color3.fromRGB(110, 112, 112) },
+        { h = 8, material = "CONCRETE", surface = CONCRETE, color = Color3.fromRGB(122, 124, 122) },
+    }
+    -- Cover A (west), B (east), C (west): a three-wall chicane, 12 wide each, leaving 23-wide gaps on alternating sides.
+    for _, w in ipairs({ { "A", -17, -5, 545 }, { "B", 5, 17, 568 }, { "C", -17, -5, 591 } }) do
+        wallGrid(ctx, { group = "ROOK_COVER_" .. w[1], label = "Trial cover " .. w[1], a = Vector2.new(w[2], w[4]), b = Vector2.new(w[3], w[4]), thick = 3, rows = rows, panelW = 6, parent = parent })
+        part(g, "RookCoverFooting" .. w[1], V3(12.8, 0.5, 5.4), ctx.at((w[2] + w[3]) / 2, 0.25, w[4]), COLOR.concreteDark, CONCRETE)
+        part(g, "RookCoverStripe" .. w[1], V3(12.2, 0.7, 0.08), ctx.at((w[2] + w[3]) / 2, 15.2, w[4] - 1.55), COLOR.hazardYellow, METAL, { shadow = false })
+        sign(g, "RookCoverTag" .. w[1], "COVER " .. w[1], V3(5, 1.6, 0.1), ctx.at((w[2] + w[3]) / 2, 11.5, w[4] - 1.58), Enum.NormalId.Front, COLOR.black, COLOR.hazardYellow)
+    end
+    -- Station pad.
+    part(g, "RookStationPad", V3(26, 0.3, 22), ctx.at(0, 0.15, 606), PAD, CONCRETE, SOLID)
+    for _, s in ipairs({ -1, 1 }) do
+        part(g, "RookPadLineZ", V3(0.6, 0.05, 22), ctx.at(s * 12.7, 0.32, 606), COLOR.hazardYellow, Enum.Material.SmoothPlastic, { shadow = false })
+    end
+    part(g, "RookPadLineX", V3(26, 0.05, 0.6), ctx.at(0, 0.32, 595.3), COLOR.hazardYellow, Enum.Material.SmoothPlastic, { shadow = false })
+    sign(g, "RookPadText", "ROOK-01", V3(14, 0.1, 4), ctx.at(0, 0.34, 598.6) * ANG(0, math.pi, 0), Enum.NormalId.Top, PAD, COLOR.hazardYellow)
+    -- Trial gate: a beam across the road at the southern edge of the ring and a painted trial line.
+    part(g, "RookTrialLine", V3(46, 0.05, 0.8), ctx.at(0, 0.03, 498), COLOR.hazardYellow, Enum.Material.SmoothPlastic, { shadow = false })
+    for _, s in ipairs({ -1, 1 }) do
+        part(g, "RookGatePylon", V3(3, 28, 3), ctx.at(s * 26, 14, 498), COLOR.gunmetal, METAL, SOLID)
+        glow(g, "RookGateLamp", V3(0.6, 14, 0.6), ctx.at(s * 24.2, 14, 496.4), COLOR.amber)
+    end
+    part(g, "RookGateBeam", V3(56, 3, 3), ctx.at(0, 26.5, 498), COLOR.gunmetal, METAL)
+    sign(g, "RookGateSign", "MECH TRIAL RING  -  ROOK-01\nAUTONOMOUS COMBAT TEST UNIT  -  RANGE PANEL: MECH TRIAL  (M)", V3(46, 4.6, 0.3), ctx.at(0, 26.5, 496.4), Enum.NormalId.Front, COLOR.black, COLOR.hazardYellow)
+end
+
 local function trainingMachines(ctx)
     local d = ctx.d
     local at = function(x, z) return ctx.origin + V3(x, 0, z) end
@@ -504,6 +542,8 @@ local function trainingMachines(ctx)
         patrol = { points = { at(50, 404), at(50, 530) }, speed = 5.5, turnRate = math.rad(24) },
     })
     TrainingMech.Create(d, { id = "M-01", position = at(-42, 548), yaw = 0 })
+    -- M10C: the autonomous opponent, parked and unpowered on its station pad until MECH TRIAL is selected.
+    EnemyMech.Create(d, { enemyId = "ROOK_01" })
 end
 
 -- Entry point ------------------------------------------------------------------------------------------------------------------------
@@ -527,6 +567,7 @@ function DistrictBuilder.Build(bay: Model, origin: Vector3, parent: Instance)
     gantryShed(ctx, g)
     warehouse(ctx)
     bunker(ctx)
+    rookCourt(ctx, g)
     trainingMachines(ctx)
     d.dirty = true
     return d

@@ -87,11 +87,35 @@ function Hud.Start(remotes, cameraMode)
     modeButton.MouseButton1Click:Connect(function()
         remotes.RequestCombatMode:FireServer(if currentMode == "ACTIVE" then "PASSIVE" else "ACTIVE")
     end)
-    local incoming = label("Incoming", "", 364, 36, CYAN, 13)
-    local hostiles = label("Hostiles", "", 402, 52, CYAN, 13)
-    hint.Position = UDim2.fromOffset(9, 452)
-    hint.Text = "B  RESET ALL   |   N  TRAINING MODE   |   ALT: cursor"
-    panel.Size = UDim2.fromOffset(318, 476)
+    -- M10C MECH TRIAL: the autonomous opponent. A mode button next to a trial reset (ROOK rebuilt, Bastion repaired and rearmed).
+    local mechButton = Instance.new("TextButton")
+    mechButton.Name, mechButton.Size, mechButton.Position = "MechTrial", UDim2.fromOffset(196, 32), UDim2.fromOffset(9, 362)
+    mechButton.BackgroundColor3, mechButton.TextColor3, mechButton.Font, mechButton.TextSize = Color3.fromRGB(22, 37, 46), CYAN, Enum.Font.GothamBold, 12
+    mechButton.AutoButtonColor = true
+    mechButton.Parent = panel
+    local mechStroke = Instance.new("UIStroke")
+    mechStroke.Color, mechStroke.Thickness = Color3.fromRGB(70, 110, 124), 1.2
+    mechStroke.Parent = mechButton
+    mechButton.MouseButton1Click:Connect(function()
+        remotes.RequestCombatMode:FireServer(if currentMode == "MECH" then "PASSIVE" else "MECH")
+    end)
+    local trialReset = Instance.new("TextButton")
+    trialReset.Name, trialReset.Text, trialReset.Size, trialReset.Position = "ResetTrial", "RESET TRIAL", UDim2.fromOffset(100, 32), UDim2.fromOffset(209, 362)
+    trialReset.BackgroundColor3, trialReset.TextColor3, trialReset.Font, trialReset.TextSize = Color3.fromRGB(22, 37, 46), AMBER, Enum.Font.GothamBold, 12
+    trialReset.AutoButtonColor = true
+    trialReset.Parent = panel
+    local resetStroke = Instance.new("UIStroke")
+    resetStroke.Color, resetStroke.Thickness = Color3.fromRGB(70, 110, 124), 1.2
+    resetStroke.Parent = trialReset
+    trialReset.MouseButton1Click:Connect(function()
+        remotes.RequestRangeReset:FireServer("MECH")
+    end)
+    local rookInfo = label("RookInfo", "", 398, 36, CYAN, 13)
+    local incoming = label("Incoming", "", 438, 36, CYAN, 13)
+    local hostiles = label("Hostiles", "", 476, 52, CYAN, 13)
+    hint.Position = UDim2.fromOffset(9, 528)
+    hint.Text = "B  RESET ALL  |  N  TANKS  |  M  MECH TRIAL  |  ALT: cursor"
+    panel.Size = UDim2.fromOffset(318, 552)
 
     -- Notices (toast stack, top centre): TARGET DISABLED, VEHICLE DESTROYED, WALL BREACHED ...
     local toastFrame = Instance.new("Frame")
@@ -180,10 +204,17 @@ function Hud.Start(remotes, cameraMode)
         -- Combat training state (server-published district attributes)
         currentMode = district:GetAttribute("CombatMode") or "PASSIVE"
         local armed = district:GetAttribute("CombatArmed") == true
-        modeButton.Text = if currentMode == "ACTIVE" then (if armed then "ACTIVE TRAINING  -  TANKS ARMED" else "ACTIVE TRAINING  -  ARMING...") else "PASSIVE RANGE  -  TANKS HOLD FIRE"
+        modeButton.Text = if currentMode == "ACTIVE" then (if armed then "ACTIVE TRAINING  -  TANKS ARMED" else "ACTIVE TRAINING  -  ARMING...")
+            elseif currentMode == "MECH" then "TANKS HOLD FIRE  (CLICK: ACTIVE TRAINING)" else "PASSIVE RANGE  -  TANKS HOLD FIRE"
         modeButton.TextColor3 = if currentMode == "ACTIVE" then Color3.fromRGB(255, 120, 96) else CYAN
         modeStroke.Color = if currentMode == "ACTIVE" then Color3.fromRGB(190, 70, 56) else Color3.fromRGB(70, 110, 124)
-        combatTitle.Text = if currentMode == "ACTIVE" then "COMBAT TRAINING  /  LIVE FIRE" else "COMBAT TRAINING  /  SAFE"
+        local rookStatus = district:GetAttribute("RookStatus") or "STANDBY"
+        mechButton.Text = if currentMode == "MECH" then (if armed then "MECH TRIAL LIVE - END" else "MECH TRIAL - POWERING UP") else "MECH TRIAL - ROOK-01"
+        mechButton.TextColor3 = if currentMode == "MECH" then Color3.fromRGB(255, 120, 96) else CYAN
+        mechStroke.Color = if currentMode == "MECH" then Color3.fromRGB(190, 70, 56) else Color3.fromRGB(70, 110, 124)
+        combatTitle.Text = if currentMode == "ACTIVE" then "COMBAT TRAINING  /  LIVE FIRE" elseif currentMode == "MECH" then "MECH TRIAL  /  LIVE FIRE" else "COMBAT TRAINING  /  SAFE"
+        rookInfo.Text = string.format("ROOK-01  %s  %s\nSTRUCT %d%%  CAP %d%%  SHIELD %s  ROUNDS %d", rookStatus, district:GetAttribute("RookState") or "-",
+            a("RookStructure"), a("RookCharge"), district:GetAttribute("RookShield") or "-", a("RookShots"))
         incoming.Text = string.format("SHELLS %d | HITS %d | PERFECT %d GUARD %d\nUNSHIELDED %d | OFF-AXIS %d", a("CombatShots"), a("CombatMechHits"), a("CombatPerfect"), a("CombatGuard"), a("CombatUnshielded"), a("CombatOffAxis"))
         local lines = {}
         for _, model in ipairs(district:GetChildren()) do
@@ -203,6 +234,8 @@ function Hud.Start(remotes, cameraMode)
             remotes.RequestRangeReset:FireServer("ALL")
         elseif input.KeyCode == Enum.KeyCode.N and panel.Visible then
             remotes.RequestCombatMode:FireServer(if currentMode == "ACTIVE" then "PASSIVE" else "ACTIVE")
+        elseif input.KeyCode == Enum.KeyCode.M and panel.Visible then
+            remotes.RequestCombatMode:FireServer(if currentMode == "MECH" then "PASSIVE" else "MECH")
         end
     end)
 
@@ -213,7 +246,7 @@ function Hud.Start(remotes, cameraMode)
             remotes.RequestRangeReset:FireServer(kind or "ALL")
         elseif command == "state" then
             return { visible = panel.Visible, damage = damage.Text, targets = targets.Text, structures = structures.Text, toasts = #toasts,
-                mode = currentMode, modeText = modeButton.Text, incoming = incoming.Text, hostiles = hostiles.Text }
+                mode = currentMode, modeText = modeButton.Text, mechText = mechButton.Text, rookText = rookInfo.Text, incoming = incoming.Text, hostiles = hostiles.Text }
         elseif command == "mode" then
             remotes.RequestCombatMode:FireServer(kind)
         end

@@ -162,18 +162,35 @@ function TankFx.Start(remotes, hud)
             return
         end
         local scale = if e.heavy then 1.8 else 1
+        local laser = e.wk == "LR"
+        local bolt = e.wk ~= nil -- M10C: ROOK rounds ("MG" gun rounds, "LR" laser pulses)
         rig.busy = true
-        rig.core.Size = Vector3.new(0.9 * scale, 0.9 * scale, 3.2 * scale)
-        rig.a0.Position, rig.a1.Position = Vector3.new(0, 0.45 * scale, 0), Vector3.new(0, -0.45 * scale, 0)
-        rig.core.Color = if e.heavy then Color3.fromRGB(255, 120, 60) else HOT
+        if bolt then
+            -- Thin tracer for the gun, a longer cyan pulse for the laser. The muzzle flash, casings and report come from WeaponEffects.
+            rig.core.Size = if laser then Vector3.new(0.45, 0.45, 7) else Vector3.new(0.26, 0.26, 3.6)
+            rig.a0.Position, rig.a1.Position = Vector3.new(0, 0.22, 0), Vector3.new(0, -0.22, 0)
+            rig.core.Color = if laser then Color3.fromRGB(190, 245, 255) else Color3.fromRGB(255, 214, 130)
+            rig.trail.Color = if laser then ColorSequence.new(Color3.fromRGB(190, 245, 255), CYAN) else ColorSequence.new(HOT, Color3.fromRGB(190, 90, 24))
+            rig.trail.Lifetime = if laser then 0.25 else 0.18
+            rig.smoke.Enabled = false
+            rig.light.Color, rig.light.Range = if laser then CYAN else AMBER, if laser then 12 else 7
+        else
+            rig.core.Size = Vector3.new(0.9 * scale, 0.9 * scale, 3.2 * scale)
+            rig.a0.Position, rig.a1.Position = Vector3.new(0, 0.45 * scale, 0), Vector3.new(0, -0.45 * scale, 0)
+            rig.core.Color = if e.heavy then Color3.fromRGB(255, 120, 60) else HOT
+            rig.trail.Color = ColorSequence.new(HOT, Color3.fromRGB(170, 60, 18))
+            rig.trail.Lifetime = if e.heavy then 0.8 else 0.5
+            rig.smoke.Enabled = true
+            rig.light.Color, rig.light.Range = AMBER, if e.heavy then 24 else 14
+        end
         rig.core.Transparency = 0
-        rig.trail.Lifetime = if e.heavy then 0.8 else 0.5
-        rig.trail.Enabled, rig.smoke.Enabled, rig.light.Enabled = true, true, true
-        rig.light.Range = if e.heavy then 24 else 14
-        shells[e.id] = { rig = rig, o = e.o, v = e.v, t = e.t, life = e.l, tank = e.tank, arch = e.arch, heavy = e.heavy, ended = false, radius = e.r }
-        -- Muzzle discharge: flash, blast smoke along the barrel, report.
-        burst(e.o + e.v.Unit * 2, e.v.Unit, HOT, if e.heavy then 1.4 else 0.8, nil)
-        play(WeaponPresentation.audio.maulerAssetId, e.o, if e.heavy then 1.0 else 0.8, if e.heavy then 0.55 else 0.75)
+        rig.trail.Enabled, rig.light.Enabled = true, true
+        shells[e.id] = { rig = rig, o = e.o, v = e.v, t = e.t, life = e.l, tank = e.tank, arch = e.arch, heavy = e.heavy, ended = false, radius = e.r, wk = e.wk }
+        if not bolt then
+            -- Muzzle discharge: flash, blast smoke along the barrel, report.
+            burst(e.o + e.v.Unit * 2, e.v.Unit, HOT, if e.heavy then 1.4 else 0.8, nil)
+            play(WeaponPresentation.audio.maulerAssetId, e.o, if e.heavy then 1.0 else 0.8, if e.heavy then 0.55 else 0.75)
+        end
         hud.OnFire(e)
     end
 
@@ -186,9 +203,9 @@ function TankFx.Start(remotes, hud)
             shell.rig.core.Transparency = 1
             shell.rig.smoke.Enabled, shell.rig.light.Enabled = false, false
         end
-        local power = if e.heavy then 1.6 else 1
+        local power = if e.heavy then 1.6 else (if e.wk then 0.45 else 1)
         if e.why == "WORLD" then
-            burst(e.p, e.n or Vector3.yAxis, AMBER, power, nil)
+            burst(e.p, e.n or Vector3.yAxis, if e.wk == "LR" then CYAN else AMBER, power, nil)
         elseif e.why == "MECH" then
             local timing = e.timing
             if timing == "PERFECT" then
@@ -235,6 +252,20 @@ function TankFx.Start(remotes, hud)
                     if child:IsA("Model") and child:GetAttribute("AiType") then
                         table.insert(tanks, child)
                     end
+                end
+            end
+        end
+    end
+    -- ROOK-01 (and any later autonomous mech): models in IronframeMechs that carry an EnemyId.
+    local enemies: { Model } = {}
+    local lastEnemyScan = -10
+    local function findEnemies()
+        table.clear(enemies)
+        local folder = workspace:FindFirstChild("IronframeMechs")
+        if folder then
+            for _, child in ipairs(folder:GetChildren()) do
+                if child:IsA("Model") and child:GetAttribute("EnemyId") then
+                    table.insert(enemies, child)
                 end
             end
         end
@@ -338,6 +369,50 @@ function TankFx.Start(remotes, hud)
                 else
                     rig.charge.Transparency = 1
                 end
+                rig.beam.Transparency = 1
+                rig.light.Brightness = math.max(0, rig.light.Brightness - dt * 30)
+            end
+        end
+        -- Autonomous mech weapon telegraphs: the muzzle of the weapon that is spooling / charging glows; a laser charge shows a targeting
+        -- line along the arm's aim that flickers faster toward the discharge and turns steady once the lock lands.
+        if now - lastEnemyScan > 0.75 then
+            lastEnemyScan = now
+            findEnemies()
+        end
+        for _, model in ipairs(enemies) do
+            if not model.Parent then
+                continue
+            end
+            local attack = model:GetAttribute("AiAttack") or ""
+            local phase = model:GetAttribute("AiPhase") or ""
+            local rig = tankRigs[model]
+            local socket = model:GetAttribute("WeaponSocket")
+            local emitterPart = socket and model:FindFirstChild("Weapon_" .. socket .. "_Emitter")
+            if attack ~= "" and (phase == "SPOOL" or phase == "CHARGE") and emitterPart then
+                rig = rig or rigFor(model)
+                local warn = model:GetAttribute("AiWarn") or 1
+                local f = math.clamp((serverNow - (model:GetAttribute("AiAimAt") or serverNow)) / warn, 0, 1)
+                local laser = attack == "LR"
+                local color = if laser then CYAN:Lerp(Color3.fromRGB(235, 252, 255), f) else AMBER:Lerp(HOT, f)
+                rig.charge.Size = Vector3.one * ((0.3 + 1.1 * f ^ 1.4) * (if laser then 1.3 else 0.7))
+                rig.charge.CFrame = (emitterPart :: BasePart).CFrame * CFrame.new(0, 0, -0.6)
+                rig.charge.Color = color
+                rig.charge.Transparency = 0.35 - 0.3 * f
+                rig.light.Brightness, rig.light.Color = 1 + 3.5 * f, color
+                local aim = model:GetAttribute("WeaponAim")
+                if laser and f > 0.35 and typeof(aim) == "Vector3" then
+                    local from = (emitterPart :: BasePart).Position
+                    local distance = math.clamp((aim - from).Magnitude, 10, 320)
+                    local locked = f >= 0.78
+                    rig.beam.Size = Vector3.new(0.18, 0.18, distance)
+                    rig.beam.CFrame = CFrame.lookAt(from, aim) * CFrame.new(0, 0, -distance / 2)
+                    rig.beam.Color = if locked then RED else AMBER
+                    rig.beam.Transparency = if locked then 0.15 else 0.35 + 0.35 * math.sin(now * (12 + 40 * f)) ^ 2
+                else
+                    rig.beam.Transparency = 1
+                end
+            elseif rig then
+                rig.charge.Transparency = math.min(1, rig.charge.Transparency + dt * 8)
                 rig.beam.Transparency = 1
                 rig.light.Brightness = math.max(0, rig.light.Brightness - dt * 30)
             end

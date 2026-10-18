@@ -57,6 +57,7 @@ function CombatHud.Start(remotes, cameraMode)
     local top = Instance.new("Frame")
     top.Name, top.AnchorPoint, top.Position, top.Size = "Alerts", Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 178), UDim2.fromOffset(640, 120)
     top.BackgroundTransparency = 1
+    top.Size = UDim2.fromOffset(640, 168)
     top.Parent = gui
     local threatLine = text(top, "Threat", UDim2.fromOffset(640, 22), UDim2.fromOffset(0, 0), AMBER, 17)
     threatLine.Font = Enum.Font.RobotoMono
@@ -65,6 +66,12 @@ function CombatHud.Start(remotes, cameraMode)
         feed[i] = text(top, "Alert" .. i, UDim2.fromOffset(640, 20), UDim2.fromOffset(0, 24 + (i - 1) * 21), WHITE, 15)
         feed[i].TextTransparency = 1
     end
+    -- M10C autonomous-mech target readout: identification, state, range, structure, shield, and (when the sensors can see it) the
+    -- condition of its six regions.
+    local rookLine = text(top, "RookTarget", UDim2.fromOffset(640, 18), UDim2.fromOffset(0, 92), CYAN, 14)
+    rookLine.Font = Enum.Font.RobotoMono
+    local rookRegions = text(top, "RookRegions", UDim2.fromOffset(640, 16), UDim2.fromOffset(0, 112), WHITE, 12)
+    rookRegions.Font = Enum.Font.RobotoMono
     local alerts: { { text: string, color: Color3, born: number, key: string } } = {}
     local function alert(msg: string, color: Color3, key: string?)
         local now = os.clock()
@@ -216,6 +223,26 @@ function CombatHud.Start(remotes, cameraMode)
     local district: Instance? = nil
     local districtAt = -10
 
+    -- ROOK-01 tracking (client presentation of replicated attributes only).
+    local rookModel: Model? = nil
+    local rookScanAt = -10
+    local rookPrev: { [string]: any } = { state = "", attack = "", serial = 0, model = nil }
+    local rookSeen, rookSeenAt = false, -10
+    local ROOK_REGION_LABEL = { CORE = "CORE", ARM_L = "L-WPN", ARM_R = "R-WPN", LEG_L = "L-LEG", LEG_R = "R-LEG", REACTOR = "RCTR" }
+    local rookParams = RaycastParams.new()
+    rookParams.FilterType = Enum.RaycastFilterType.Exclude
+    local function findRook(): Model?
+        local folder = workspace:FindFirstChild("IronframeMechs")
+        if folder then
+            for _, child in ipairs(folder:GetChildren()) do
+                if child:IsA("Model") and child:GetAttribute("EnemyId") then
+                    return child
+                end
+            end
+        end
+        return nil
+    end
+
     local function updateCondition(mech: Model, now: number)
         local fractions = {}
         for _, region in ipairs(Damage.Regions) do
@@ -327,6 +354,111 @@ function CombatHud.Start(remotes, cameraMode)
                 end
             end
         end
+        -- M10C: autonomous mech readouts, alerts and weapon warnings
+        if now - rookScanAt > 0.75 or (rookModel and not rookModel.Parent) then
+            rookScanAt = now
+            rookModel = findRook()
+        end
+        local rook = rookModel
+        local rookThreat: { t: number, shell: any, miss: number }? = nil
+        rookLine.Text, rookRegions.Text = "", ""
+        if rook and rook.Parent then
+            if rookPrev.model ~= rook then
+                -- A rebuilt ROOK (trial reset) starts fresh: no stale transitions, no phantom hit alert.
+                rookPrev.model, rookPrev.state, rookPrev.attack, rookPrev.serial = rook, rook:GetAttribute("AiState") or "IDLE", "", rook:GetAttribute("HitSerial") or 0
+            end
+            local rstate = rook:GetAttribute("AiState") or "IDLE"
+            local status = (district and district:GetAttribute("RookStatus")) or rook:GetAttribute("RookStatus") or "STANDBY"
+            local down = rook:GetAttribute("Disabled") == true
+            local attack, phase = rook:GetAttribute("AiAttack") or "", rook:GetAttribute("AiPhase") or ""
+            if rstate ~= rookPrev.state then
+                if rstate == "ACQUIRE" then
+                    alert("ROOK-01 - TARGET ACQUIRED", AMBER, "rk_acq")
+                    Audio.Blip(1.1)
+                elseif rstate == "DEFEND" then
+                    alert("ROOK-01 - PULSE SHIELD RAISED", CYAN, "rk_def")
+                elseif rstate == "DISABLED" then
+                    alert(if rook:GetAttribute("Wreck") then "ROOK-01 DISABLED - CORE FAILURE - TRIAL COMPLETE" else "ROOK-01 NEUTRALIZED - TRIAL COMPLETE", CYAN, "rk_dis")
+                end
+                rookPrev.state = rstate
+            end
+            local attackKey = attack .. ":" .. phase
+            if attackKey ~= rookPrev.attack then
+                if phase == "SPOOL" then
+                    alert("ROOK-01 MG-9 SPOOLING - SUPPRESSIVE FIRE", AMBER, "rk_mg")
+                    Audio.Blip(1.6)
+                elseif phase == "CHARGE" then
+                    alert("ROOK-01 LR-12 CHARGING - BREAK THE LOCK OR RAISE SHIELD", RED, "rk_lr")
+                    Audio.Blip(2)
+                end
+                rookPrev.attack = attackKey
+            end
+            local serial = rook:GetAttribute("HitSerial") or 0
+            if serial ~= rookPrev.serial then
+                rookPrev.serial = serial
+                local timing = rook:GetAttribute("LastHitTiming")
+                local region = Config.mech.names[rook:GetAttribute("LastHitRegion") or ""] or "?"
+                if timing == "PERFECT" or timing == "GUARD" then
+                    alert(string.format("ROOK-01 SHIELD ABSORBED  [%s]", region), GOLD, "rk_hit")
+                else
+                    alert(string.format("HIT ROOK-01  [%s]", region), WHITE, "rk_hit")
+                end
+            end
+            local rc = rook:FindFirstChild("Chassis") :: BasePart?
+            if rc and not down and (status == "ACTIVE" or rstate ~= "IDLE") then
+                local distance = (rc.Position - center).Magnitude
+                -- Sensor visibility: the region condition is only shown while the camera has a clear view of the machine.
+                if now - rookSeenAt > 0.25 then
+                    rookSeenAt = now
+                    local filter = { mech, rook:FindFirstChild("HitVolumes") }
+                    for _, name in ipairs({ "IronframeWeaponEffects", "IronframeCombatFx", "IronframeCockpitClient", "IronframeShieldEffects" }) do
+                        local extra = workspace:FindFirstChild(name)
+                        if extra then
+                            table.insert(filter, extra)
+                        end
+                    end
+                    rookParams.FilterDescendantsInstances = filter
+                    local origin = camera.CFrame.Position
+                    local target = rc.Position + Vector3.new(0, 9, 0)
+                    local hit = workspace:Raycast(origin, target - origin, rookParams)
+                    rookSeen = hit == nil or hit.Instance:IsDescendantOf(rook)
+                end
+                local bearing = facingBearing(chassis and chassis.CFrame or camera.CFrame, rc.Position)
+                rookLine.Text = string.format("TARGET ROOK-01  %s  |  RNG %d  %s  |  STRUCT %d%%  |  SHIELD %s  |  CAP %d%%", rstate, distance + 0.5, describeBearing(bearing),
+                    rook:GetAttribute("StructurePct") or 100, rook:GetAttribute("ShieldState") or "READY",
+                    ((rook:GetAttribute("EnergyCharge") or 0) / math.max(rook:GetAttribute("EnergyCapacity") or 160, 1)) * 100)
+                rookLine.TextColor3 = if rstate == "ENGAGE" or rstate == "DEFEND" then RED else AMBER
+                if rookSeen and distance < 240 then
+                    local parts, worst = {}, 1
+                    for _, region in ipairs(Damage.Regions) do
+                        local f = rook:GetAttribute("Dmg_" .. region) or 1
+                        worst = math.min(worst, f)
+                        table.insert(parts, string.format("%s %d", ROOK_REGION_LABEL[region], f * 100 + 0.5))
+                    end
+                    rookRegions.Text = table.concat(parts, "  ")
+                    rookRegions.TextColor3 = if worst <= Config.mech.criticalAt then RED elseif worst <= Config.mech.damagedAt then AMBER else CYAN
+                else
+                    rookRegions.Text = "ROOK-01 SUBSYSTEMS: NO SENSOR CONTACT"
+                    rookRegions.TextColor3 = Color3.fromRGB(120, 160, 172)
+                end
+                -- A charging laser / spooling gun is a "targeted" warning, and the laser feeds the guard ring like an in-flight shell.
+                if phase == "SPOOL" or phase == "CHARGE" then
+                    local warn = rook:GetAttribute("AiWarn") or 1
+                    local remaining = math.max(0, warn - (workspace:GetServerTimeNow() - (rook:GetAttribute("AiAimAt") or 0)))
+                    if not targeted or remaining < targeted.f then
+                        targeted = { text = string.format("TARGETED  ROOK-01 %s  |  FIRING IN %.1fs", if attack == "LR" then "LR-12" else "MG-9", remaining), f = remaining }
+                    end
+                    if attack == "LR" then
+                        local flight = distance / 520
+                        local toMe = (center + Vector3.new(0, 9, 0) - rc.Position)
+                        rookThreat = { t = remaining + flight, miss = 0, shell = { tank = "ROOK-01", pos = rc.Position, v = toMe.Unit * 520, r = 0.5 } }
+                    end
+                end
+            elseif down then
+                rookLine.Text = "ROOK-01  " .. (if rook:GetAttribute("Wreck") then "DISABLED" else "NEUTRALIZED") .. "  -  TRIAL COMPLETE  (RESET TRIAL TO REPEAT)"
+                rookLine.TextColor3 = CYAN
+            end
+        end
         Telemetry.Publish("combat.targets", table.concat(targets, " | "))
 
         local threats = {}
@@ -337,6 +469,11 @@ function CombatHud.Start(remotes, cameraMode)
                     table.insert(threats, { t = math.max(t, 0), shell = shell, miss = miss })
                 end
             end
+        end
+        if rookThreat then
+            table.insert(threats, rookThreat)
+        end
+        if fx or rookThreat then
             table.sort(threats, function(a, b) return a.t < b.t end)
         end
         local shieldState = mech:GetAttribute("ShieldState") or "READY"

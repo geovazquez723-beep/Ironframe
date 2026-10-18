@@ -11,7 +11,7 @@ local BastionBuilder = require(script.Parent.BastionBuilder)
 local Factory = {}
 
 local BUILDERS = { IF42_BASTION = BastionBuilder }
-local VARIANTS = { BALANCED = "STANDARD", ENERGY = "ENERGY", MISSILE = "MISSILE" }
+local VARIANTS = { BALANCED = "STANDARD", ENERGY = "ENERGY", MISSILE = "MISSILE", ROOK = "ROOK" }
 
 -- options.useAssets = false forces the all-procedural build (tests, and the documented fallback when assets are missing).
 function Factory.Create(ownerUserId, presetId, loadout, position, options)

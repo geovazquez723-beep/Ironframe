@@ -44,4 +44,19 @@ local Loadouts = {
     },
 }
 
+-- M10C: enemy loadouts. Deliberately NOT in `presets` / `order`: the player can never select, assemble or deploy these (SetPreset only
+-- accepts ids from `presets`). The rig contract (MechRig weapon recoil / aiming) and the builders look them up through `Loadouts.Get`.
+Loadouts.enemy = {
+    ROOK = {
+        name = "ROOK-01 / Autonomous Combat Test Unit",
+        chassisId = "IF42_BASTION",
+        systems = { reactor = "CORE_220", cooling = "RAD_STANDARD", armor = "ARMOR_STANDARD" },
+        mounts = { left_arm = "W_LASER_RIFLE", right_arm = "W_MACHINE_GUN" },
+    },
+}
+
+function Loadouts.Get(id)
+    return Loadouts.presets[id] or Loadouts.enemy[id]
+end
+
 return Loadouts

@@ -10,6 +10,7 @@
 local Destructibles = require(script.Parent.Destructibles)
 local CombatTargets = require(script.Parent.CombatTargets)
 local TankCombat = require(script.Parent.TankCombat) -- M10B
+local EnemyMech = require(script.Parent.EnemyMech) -- M10C
 local BastionDamage = require(script.Parent.BastionDamage) -- M10B
 local Locomotion = require(script.Parent.Locomotion) -- M10B (test teleport / input only)
 local EnergySystems = require(script.Parent.EnergySystems) -- M10B (test shield only)
@@ -17,7 +18,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local RangeControl = {}
 
-local KINDS = { ALL = true, VEHICLES = true, STRUCTURES = true }
+local KINDS = { ALL = true, VEHICLES = true, STRUCTURES = true, MECH = true } -- MECH (M10C): rebuild ROOK-01, repair and rearm the Bastion
 local MIN_INTERVAL = 1.5
 local ZONE_MIN_Z = 322
 local HANGAR_MAX_Z = 60
@@ -193,6 +194,60 @@ installAuditInterface = function(sessions: { [Player]: any })
         elseif command == "target" then
             local target = TankCombat.TargetOf(d)
             return target ~= nil
+        -- M10C audit / test commands for ROOK-01. They use the same Destructibles.Hit / shield / brain paths as live play.
+        elseif command == "rook" then
+            return EnemyMech.Audit(d)
+        elseif command == "rookpart" then -- region -> the hit volume a weapon ray would strike (CORE | ARM_L | ARM_R | LEG_L | LEG_R | REACTOR)
+            if d.rook then
+                for _, v in ipairs(d.rook.volumes) do
+                    if v.region == a then
+                        return v.part
+                    end
+                end
+            end
+            return nil
+        elseif command == "rookhit" then -- region, weaponId, shots, origin Vector3?: shots resolved exactly like the player's weapon hits
+            local rook = d.rook
+            if not rook then
+                return nil
+            end
+            local part
+            for _, v in ipairs(rook.volumes) do
+                if v.region == a then
+                    part = v.part
+                    break
+                end
+            end
+            local spec = Components[b].combat
+            local total = 0
+            for _ = 1, c or 1 do
+                total += CombatTargets.Hit(part, spec.category, spec.damage, os.clock(), { weapon = b, position = part.Position, normal = Vector3.new(0, 0, -1), origin = rook.hitOrigin })
+            end
+            return total
+        elseif command == "rookorigin" then -- Vector3 | nil: where "test" shooters stand (for the directional shield)
+            if d.rook then
+                d.rook.hitOrigin = a
+            end
+            return true
+        elseif command == "rookteleport" then -- x, z (world), yaw: test placement only (never used by the AI)
+            local rook = d.rook
+            if rook then
+                Locomotion.Teleport(rook.controller, Vector3.new(a, rook.groundY, b), c or 0)
+                rook.route, rook.goal = nil, nil
+                return true
+            end
+            return false
+        elseif command == "rookdrain" then -- set ROOK's capacitor charge (test equipment)
+            local rook = d.rook
+            if rook then
+                rook.power.energy.charge = a
+                rook.power.energy.tokens = math.min(rook.power.energy.tokens, a)
+                return true
+            end
+            return false
+        elseif command == "rookwreck" then -- region, damage: penetrating damage straight to a region (component / terminal tests)
+            local rook = d.rook
+            return rook ~= nil and BastionDamage.Hit(rook.unit, a, b) ~= nil
         end
         return nil
     end

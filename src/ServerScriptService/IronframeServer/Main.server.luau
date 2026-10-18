@@ -49,7 +49,7 @@ local WeaponEffects = remote("RemoteEvent", "WeaponEffects")
 local DestructionFx = remote("RemoteEvent", "DestructionFx") -- M10A: batched cosmetic destruction events (server -> owner)
 local RequestRangeReset = remote("RemoteEvent", "RequestRangeReset") -- M10A: "ALL" | "VEHICLES" | "STRUCTURES"
 local CombatFx = remote("RemoteEvent", "CombatFx") -- M10B: server -> owner, arrays of cosmetic shell events (fire / end)
-local RequestCombatMode = remote("RemoteEvent", "RequestCombatMode") -- M10B: "PASSIVE" | "ACTIVE" (allow-listed, validated)
+local RequestCombatMode = remote("RemoteEvent", "RequestCombatMode") -- M10B/M10C: "PASSIVE" | "ACTIVE" | "MECH" (allow-listed, validated)
 
 local function validatePresets()
     local count = 0
@@ -141,7 +141,7 @@ local function assemble(player)
 end
 
 RangeControl.Init(DestructionFx, RequestRangeReset, sessions)
-TankCombat.Init({ sessions = sessions, fx = CombatFx })
+TankCombat.Init({ sessions = sessions, fx = CombatFx, weaponFx = WeaponEffects })
 WorldBuilder.Initialize()
 validatePresets()
 selfTestResult = SelfTest.Run()
@@ -266,7 +266,7 @@ end
 
 RequestCombatMode.OnServerEvent:Connect(function(player, mode)
     local session = sessions[player]
-    if not session or type(mode) ~= "string" or (mode ~= "PASSIVE" and mode ~= "ACTIVE") then return end
+    if not session or type(mode) ~= "string" or (mode ~= "PASSIVE" and mode ~= "ACTIVE" and mode ~= "MECH") then return end
     if session.deployment ~= "ACTIVE" or session.machineState ~= "OPERATIONAL" or not session.bay then return end
     if os.clock() - (session.lastCombatMode or -100) < 0.4 then return end
     session.lastCombatMode = os.clock()

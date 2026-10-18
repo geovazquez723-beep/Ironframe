@@ -91,7 +91,7 @@ function Weapons.Step(session, effects)
             local spec = slot.spec
             local result = workspace:Raycast(origin,direction*spec.range,params)
             local endpoint = result and result.Position or origin + direction*spec.range
-            local damage = result and Targets.Hit(result.Instance,spec.category,spec.damage,now,{weapon=slot.id,position=result.Position,normal=result.Normal}) or 0
+            local damage = result and Targets.Hit(result.Instance,spec.category,spec.damage,now,{weapon=slot.id,position=result.Position,normal=result.Normal,origin=origin}) or 0
             if damage > 0 then s.hits += 1; s.lastHit = result.Instance.Name; s.lastDamage = damage end
             local shotAt = workspace:GetServerTimeNow()
             model:SetAttribute("WeaponShotAt",shotAt)

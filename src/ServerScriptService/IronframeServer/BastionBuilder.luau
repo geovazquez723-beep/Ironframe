@@ -71,6 +71,14 @@ local PALETTES = {
         accent = Color3.fromRGB(46, 150, 172), glow = Color3.fromRGB(60, 215, 245), beam = Color3.fromRGB(70, 220, 245),
         visor = Color3.fromRGB(100, 240, 215),
     },
+    -- M10C: ROOK-01, an unmanned range training platform. Dark graphite and weathered steel armour, muted yellow identification
+    -- markings, a hot-orange sensor window instead of a pilot's canopy.
+    ROOK = {
+        primary = Color3.fromRGB(48, 50, 54), secondary = Color3.fromRGB(86, 90, 94), tint = Color3.fromRGB(96, 100, 104),
+        dark = Color3.fromRGB(20, 21, 24), ring = Color3.fromRGB(60, 62, 66), steel = Color3.fromRGB(138, 142, 146),
+        accent = Color3.fromRGB(184, 156, 46), glow = Color3.fromRGB(255, 150, 44), beam = Color3.fromRGB(255, 140, 56),
+        visor = Color3.fromRGB(255, 92, 40),
+    },
     MISSILE = {
         primary = Color3.fromRGB(74, 70, 46), secondary = Color3.fromRGB(52, 50, 36), tint = Color3.fromRGB(132, 120, 92),
         dark = Color3.fromRGB(30, 29, 27), ring = Color3.fromRGB(70, 66, 58), steel = Color3.fromRGB(122, 120, 112),
@@ -394,8 +402,48 @@ local function buildLeg(kit, p, side, ctx)
     end
 end
 
+-- ROOK-01 identity: a tall sensor module on the head, painted designation plates on the pauldron fronts, yellow shin bands and
+-- indicator lamps (named RookLamp*: the client pulses them by AI state). Everything rides an existing joint, so the rig is unchanged.
+local function stencil(part: BasePart, text: string, color: Color3)
+    local gui = Instance.new("SurfaceGui")
+    gui.Face = Enum.NormalId.Front
+    gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+    gui.PixelsPerStud = 48
+    gui.LightInfluence = 0.15
+    gui.Parent = part
+    local label = Instance.new("TextLabel")
+    label.Size, label.BackgroundTransparency, label.Text, label.TextColor3 = UDim2.fromScale(1, 1), 1, text, color
+    label.Font, label.TextScaled = Enum.Font.GothamBlack, true
+    label.Parent = gui
+end
+
+local function buildRookExtras(kit, p)
+    kit:box("CommMast", "Torso", V(0.15, 2.2, 0.15), C(-1.5, 6.5, 2.4), p.steel, "detail", METAL)
+    -- Sensor module: mast, dome housing, a wide sensor window and a bar of three indicator lamps across the brow.
+    kit:cylY("RookSensorMast", "Head", 1.0, 0.9, C(0, 2.0, 0.1), p.dark, "detail", METAL)
+    kit:cylY("RookSensorDome", "Head", 1.0, 2.5, C(0, 2.9, 0.1), p.secondary, "armor")
+    kit:cylY("RookSensorCap", "Head", 0.2, 1.7, C(0, 3.5, 0.1), p.dark, "detail", METAL)
+    kit:glow("RookSensorEye", "Head", V(1.6, 0.3, 0.12), C(0, 2.95, -1.28), p.visor, "glow")
+    kit:box("RookSensorBar", "Head", V(4.4, 0.4, 0.7), C(0, 1.15, -1.7) * A(-0.12, 0, 0), p.dark, "armor", METAL)
+    for i = -1, 1 do
+        kit:glow("RookLampHead" .. (i + 2), "Head", V(0.4, 0.22, 0.1), C(i * 1.0, 1.15, -2.06), p.glow, "glow")
+    end
+    for _, side in ipairs(SIDES) do
+        local s, t = side[2], side[1]
+        -- Designation plates on the pauldron fronts (muted yellow, black stencil).
+        local plate = kit:box("RookIdPlate" .. t, "Torso", V(3.2, 1.05, 0.08), C(s * 5.2, 5.35, -3.04) * A(0.25, 0, 0), p.accent, "armor")
+        stencil(plate, if s < 0 then "ROOK" else "01", Color3.fromRGB(18, 18, 20))
+        kit:glow("RookLamp" .. t, "Torso", V(0.34, 0.2, 0.1), C(s * 5.2, 6.05, -3.12), p.glow, "glow")
+        kit:box("RookShinBand" .. t, "Knee" .. t, V(2.7, 0.42, 0.06), C(0, -1.0, -1.78) * A(-0.12, 0, 0), p.accent, "armor")
+        kit:box("RookShinBandB" .. t, "Knee" .. t, V(2.7, 0.42, 0.06), C(0, -2.2, -1.78) * A(-0.12, 0, 0), p.accent, "armor")
+        kit:box("RookThighBand" .. t, "Thigh" .. t, V(2.7, 0.4, 0.06), C(0, -2.6, -1.8) * A(0.1, 0, 0), p.accent, "armor")
+    end
+end
+
 local function buildVariantExtras(kit, p, ctx)
-    if ctx.variant == "ENERGY" then
+    if ctx.variant == "ROOK" then
+        buildRookExtras(kit, p)
+    elseif ctx.variant == "ENERGY" then
         for _, side in ipairs(SIDES) do
             local s, t = side[2], side[1]
             kit:cylY("CapacitorSpire" .. t, "Torso", 2.8, 0.7, C(s * 0.95, 6.5, 3.0), p.dark, "reactor", METAL)

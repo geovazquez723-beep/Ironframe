@@ -21,8 +21,10 @@ local function round2(n: number): number
     return math.floor(n * 100 + 0.5) / 100
 end
 
+-- `session` is anything shaped like a pilot session: { mech = Model, controller, power, machineState }. M10C reuses this adapter for the
+-- autonomous opponent: it may carry `damageCapacity` (per-region health) and `onCoreFailure(session)` (replaces the Bastion's ejection).
 function BastionDamage.Create(session)
-    session.damage = Damage.New()
+    session.damage = Damage.New(session.damageCapacity)
     session.damageFx = Damage.Effects(session.damage)
     session.damagePublished = {}
     session.coreFailureHandled = false
@@ -101,8 +103,9 @@ function BastionDamage.Hit(session, region: string, amount: number)
     if result.coreFailed and not session.coreFailureHandled then
         session.coreFailureHandled = true
         session.mech:SetAttribute("DmgCoreFailed", true)
-        if BastionDamage.onCoreFailure then
-            BastionDamage.onCoreFailure(session)
+        local handler = session.onCoreFailure or BastionDamage.onCoreFailure
+        if handler then
+            handler(session)
         end
     end
     return result

@@ -21,10 +21,13 @@ export type State = {
     serial: number, -- increments on every applied hit
 }
 
-function Damage.New(): State
+-- `capacities` (optional, M10C) overrides the per-region health, e.g. for an autonomous opponent with its own armour. Region names,
+-- spill and consequences stay the shared Bastion conventions.
+function Damage.New(capacities: { [string]: number }?): State
     local health, capacity = {}, {}
     for region, hp in pairs(Config.mech.regions) do
-        health[region], capacity[region] = hp, hp
+        local value = if capacities and capacities[region] then capacities[region] else hp
+        health[region], capacity[region] = value, value
     end
     return { health = health, capacity = capacity, hits = 0, taken = 0, coreFailed = false, serial = 0 }
 end
