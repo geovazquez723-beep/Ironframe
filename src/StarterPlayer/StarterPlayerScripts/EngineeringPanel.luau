@@ -1,6 +1,6 @@
 -- Engineering bay (M11A): the garage's customization interface. Right-hand panel, visible while the Bastion is STOWED in the hangar.
 --
---   tabs         WEAPONS (four hardpoints) | REACTOR | DRIVE (leg actuators) | ARMOR
+--   tabs         WEAPONS (four hardpoints) | REACTOR | DRIVE (leg actuators) | ARMOR | COCKPIT (equipment package) | AVIONICS (radar, optics, thermal, targeting)
 --   list         the components the registry offers for that place (LoadoutCompiler.Catalog: nothing is hard-coded here)
 --   comparison   installed vs candidate, only the numbers that change: arrows and percentages, green = gain, amber = price
 --   INSTALL      sends component ids only; the server validates and rebuilds the machine (the model on the pad changes at once)
@@ -16,6 +16,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("IronframeShared")
 local Compiler = require(Shared:WaitForChild("LoadoutCompiler"))
 local Components = require(Shared:WaitForChild("ComponentRegistry"))
+local Avionics = require(Shared:WaitForChild("Avionics"))
 
 local Panel = {}
 
@@ -29,7 +30,9 @@ local BG = Color3.fromRGB(14, 22, 29)
 local BTN = Color3.fromRGB(28, 42, 52)
 local BTN_ON = Color3.fromRGB(52, 74, 88)
 
-local TABS = { { "WEAPONS", "weapons" }, { "REACTOR", "reactor" }, { "DRIVE", "actuators" }, { "ARMOR", "armor" } }
+local TABS = { { "WEAPONS", "weapons" }, { "REACTOR", "reactor" }, { "DRIVE", "actuators" }, { "ARMOR", "armor" }, { "COCKPIT", "cockpit" }, { "AVIONICS", "avionics" } }
+local AV_SLOTS = { { "radar", "RADAR" }, { "optics", "OPTICS" }, { "thermal", "THERMAL" }, { "targeting", "TRACKER" } }
+local FACTORY = "FACTORY"
 local SOCKET_LABEL = { left_arm = "L ARM", right_arm = "R ARM", left_shoulder = "L SHLDR", right_shoulder = "R SHLDR" }
 
 -- Comparison rows per category: { label, stat key, format, higherIsBetter }
@@ -48,6 +51,13 @@ local ROWS = {
         { "MOVE ENERGY", "moveEnergy", "x%.2f", false }, { "MASS", "mass", "%.1f t", false },
     },
 }
+-- Cockpit / avionics comparison (the compiled sensor numbers; a row only shows when the candidate changes it)
+local SENSOR_ROWS = {
+    { "RADAR RANGE", "radarRange", "%.0f st", true }, { "SCAN RATE", "radarRate", "%.1f /s", true }, { "IDENT RANGE", "identRange", "%.0f st", true },
+    { "MAX ZOOM", "zoomMax", "x%.0f", true }, { "THERMAL RNG", "thermalRange", "%.0f st", true }, { "TRACK RANGE", "trackRange", "%.0f st", true },
+    { "TRACK DETAIL", "trackDetail", "%d", true }, { "AVIONICS MASS", "avionicsMass", "%.1f t", false }, { "RATED POWER", "avionicsPower", "%.1f u/s", false },
+    { "BAYS USED", "baysUsed", "%d", false },
+}
 local WEAPON_ROWS = {
     { "DAMAGE", "damage", "%.0f", true }, { "FIRE RATE", "rate", "%.1f /s", true }, { "DPS", "dps", "%.0f", true },
     { "MAGAZINE", "magazine", "%s", true }, { "RELOAD", "reload", "%.1f s", false }, { "ENERGY", "energyRate", "%.1f u/s", false }, { "MASS", "mass", "%.1f t", false },
@@ -61,8 +71,11 @@ local function compareLines(rows, a: { [string]: any }, b: { [string]: any }): (
             any = true
             local text
             if type(x) == "number" and type(y) == "number" then
-                local pct = if math.abs(x) > 1e-9 then (y - x) / math.abs(x) * 100 else 0
-                text = string.format("%-13s " .. row[3] .. " > " .. row[3] .. "  (%+.0f%%)", row[1], x, y, pct)
+                if math.abs(x) > 1e-9 then
+                    text = string.format("%-13s " .. row[3] .. " > " .. row[3] .. "  (%+.0f%%)", row[1], x, y, (y - x) / math.abs(x) * 100)
+                else
+                    text = string.format("%-13s " .. row[3] .. " > " .. row[3] .. "  (new)", row[1], x, y)
+                end
             else
                 text = string.format("%-13s %s > %s", row[1], tostring(x), tostring(y))
             end
@@ -123,7 +136,11 @@ function Panel.Start(remotes, cameraMode)
     -- Tabs
     local tabButtons: { [string]: TextButton } = {}
     for i, tab in ipairs(TABS) do
-        local b = button(frame, "Tab_" .. tab[2], tab[1], UDim2.fromOffset(16 + (i - 1) * 91, 96), UDim2.fromOffset(86, 30), 12)
+        local b = button(frame, "Tab_" .. tab[2], tab[1], UDim2.fromOffset(16 + (i - 1) * 61, 96), UDim2.fromOffset(58, 30), 9)
+        b.TextScaled = true
+        local limit = Instance.new("UITextSizeConstraint")
+        limit.MaxTextSize = 11
+        limit.Parent = b
         tabButtons[tab[2]] = b
     end
 
@@ -133,6 +150,14 @@ function Panel.Start(remotes, cameraMode)
         local b = button(frame, "Slot_" .. socket, SOCKET_LABEL[socket], UDim2.fromOffset(16 + (i - 1) * 91, 134), UDim2.fromOffset(86, 40), 11)
         b.TextWrapped = true
         slotButtons[socket] = b
+    end
+
+    -- Avionics slot selector (only on the AVIONICS tab)
+    local avButtons: { [string]: TextButton } = {}
+    for i, spec in ipairs(AV_SLOTS) do
+        local b = button(frame, "AvSlot_" .. spec[1], spec[2], UDim2.fromOffset(16 + (i - 1) * 91, 134), UDim2.fromOffset(86, 40), 11)
+        b.TextWrapped = true
+        avButtons[spec[1]] = b
     end
 
     -- Option rows
@@ -155,6 +180,7 @@ function Panel.Start(remotes, cameraMode)
     -- State
     local state: { loadout: any?, canRevert: boolean, lastSortie: any?, deployment: string } = { loadout = nil, canRevert = false, lastSortie = nil, deployment = "STOWED" }
     local tab, slot, selected = "weapons", "left_arm", nil :: string?
+    local avSlot = "radar"
     local options: { { id: string?, name: string } } = {}
     local candidate: any = nil
     local pendingMessage, pendingAt = "", -10
@@ -169,6 +195,14 @@ function Panel.Start(remotes, cameraMode)
             end
             return { mounts = { [slot] = if selected == "EMPTY" then false else selected } }
         end
+        if tab == "cockpit" then
+            if selected == FACTORY then
+                return { cockpit = "CKP_STANDARD", avionics = { radar = "AV_RADAR_BASIC", optics = false, thermal = false, targeting = false } }
+            end
+            return { cockpit = selected }
+        elseif tab == "avionics" then
+            return { avionics = { [avSlot] = if selected == "EMPTY" then false else selected } }
+        end
         return { systems = { [tab] = selected } }
     end
 
@@ -179,6 +213,11 @@ function Panel.Start(remotes, cameraMode)
         end
         if tab == "weapons" then
             return l.mounts[slot] or "EMPTY"
+        elseif tab == "cockpit" then
+            return (Compiler.CockpitOf(l))
+        elseif tab == "avionics" then
+            local _, installed = Compiler.CockpitOf(l)
+            return (installed and installed[avSlot]) or "EMPTY"
         end
         return l.systems[tab] or (if tab == "actuators" then "ACT_STANDARD" else nil)
     end
@@ -203,6 +242,13 @@ function Panel.Start(remotes, cameraMode)
             b.Text = SOCKET_LABEL[socket] .. "\n" .. (if w then string.match(Components[w].name, "^(%S+)") or w else "EMPTY")
             b.BackgroundColor3 = if socket == slot then BTN_ON else BTN
         end
+        local _, installedAv = Compiler.CockpitOf(l)
+        for key, b in pairs(avButtons) do
+            b.Visible = tab == "avionics"
+            local id = installedAv and installedAv[key]
+            b.Text = string.upper(key == "targeting" and "TRACKER" or key) .. "\n" .. (if id then Avionics.Short[id] or id else "EMPTY")
+            b.BackgroundColor3 = if key == avSlot then BTN_ON else BTN
+        end
         -- option list for the current place
         options = {}
         if tab == "weapons" then
@@ -210,6 +256,16 @@ function Panel.Start(remotes, cameraMode)
                 table.insert(options, { id = id, name = Components[id].name })
             end
             table.insert(options, { id = "EMPTY", name = "EMPTY HARDPOINT" })
+        elseif tab == "cockpit" then
+            for _, id in ipairs(Compiler.CockpitOptions(l.chassisId)) do
+                table.insert(options, { id = id, name = Components[id].name })
+            end
+            table.insert(options, { id = FACTORY, name = "FACTORY EQUIPMENT" })
+        elseif tab == "avionics" then
+            for _, id in ipairs(Compiler.AvionicsOptions(l.chassisId, avSlot)) do
+                table.insert(options, { id = id, name = Components[id].name })
+            end
+            table.insert(options, { id = "EMPTY", name = "EMPTY BAY" })
         else
             for _, id in ipairs(Compiler.SystemOptions(tab)) do
                 table.insert(options, { id = id, name = Components[id].name })
@@ -223,7 +279,15 @@ function Panel.Start(remotes, cameraMode)
                 local c = Components[o.id :: string]
                 row.name.Text = (if o.id == installed then "[INSTALLED]  " else "") .. o.name
                 row.name.TextColor3 = if o.id == installed then CYAN else WHITE
-                if o.id == "EMPTY" then
+                if o.id == FACTORY then
+                    row.sub.Text = "Industrial cockpit, RS-4 radar only. Clears every avionics module."
+                elseif o.id == "EMPTY" and tab == "avionics" then
+                    row.sub.Text = "Nothing in this bay. Frees mass, power and a bay."
+                elseif tab == "cockpit" and c then
+                    row.sub.Text = string.format("%s  %.1f t  %.1f u/s  %d bays", c.summary or "", c.mass, c.powerDraw, c.bays)
+                elseif tab == "avionics" and c then
+                    row.sub.Text = string.format("%s  %.1f t  %.1f u/s", c.summary or "", c.mass, c.powerDraw)
+                elseif o.id == "EMPTY" then
                     row.sub.Text = "No weapon. Saves mass and power draw."
                 elseif tab == "weapons" and c and c.combat then
                     local cb = c.combat
@@ -251,6 +315,13 @@ function Panel.Start(remotes, cameraMode)
                         table.insert(lines, { text = "NO CHANGE", color = DIM })
                     end
                     table.insert(lines, { text = string.format("BUILD MASS    %.1f > %.1f t", current.metrics.mass, cc.metrics.mass), color = if dm > 0 then AMBER else GREEN })
+                elseif tab == "cockpit" or tab == "avionics" then
+                    lines = compareLines(SENSOR_ROWS, current.stats, cc.stats)
+                    local dm = cc.metrics.mass - current.metrics.mass
+                    table.insert(lines, { text = string.format("BUILD MASS    %.1f > %.1f t", current.metrics.mass, cc.metrics.mass), color = if dm > 0 then AMBER else GREEN })
+                    if #lines == 1 then
+                        table.insert(lines, 1, { text = "NO SENSOR CHANGE", color = DIM })
+                    end
                 else
                     lines = compareLines(ROWS[tab], current.stats, cc.stats)
                 end
@@ -258,14 +329,20 @@ function Panel.Start(remotes, cameraMode)
             else
                 why = reason or "NOT AVAILABLE"
                 -- Show what the part would do anyway, with the reason it cannot go in.
-                local forced = Compiler.Clone(l)
+                local forced = Compiler.Normalize(l)
                 if tab == "weapons" then
                     forced.mounts[slot] = if selected == "EMPTY" then nil else selected
+                elseif tab == "cockpit" then
+                    forced.cockpit = if selected == FACTORY then "CKP_STANDARD" else selected
+                elseif tab == "avionics" then
+                    forced.avionics[avSlot] = if selected == "EMPTY" then nil else selected
                 else
                     forced.systems[tab] = selected
                 end
                 local fc = Compiler.Compile(forced)
-                if fc.stats and tab ~= "weapons" then
+                if fc.stats and (tab == "cockpit" or tab == "avionics") then
+                    lines = compareLines(SENSOR_ROWS, current.stats, fc.stats)
+                elseif fc.stats and tab ~= "weapons" then
                     lines = compareLines(ROWS[tab], current.stats, fc.stats)
                 elseif fc.weapons and tab == "weapons" then
                     lines = compareLines(WEAPON_ROWS, weaponStats(current.weapons[slot]) or { mass = 0 }, weaponStats(fc.weapons[slot]) or { mass = 0 })
@@ -274,7 +351,7 @@ function Panel.Start(remotes, cameraMode)
                     table.insert(lines, { text = string.format("BUILD MASS    %.1f > %.1f t  (limit %.1f)", current.metrics.mass, fc.metrics.mass, fc.metrics.massLimit), color = RED })
                 end
             end
-            compareTitle.Text = "INSTALLED  >  " .. string.upper(Components[selected] and Components[selected].name or "EMPTY")
+            compareTitle.Text = "INSTALLED  >  " .. string.upper(if selected == FACTORY then "FACTORY EQUIPMENT" else (Components[selected] and Components[selected].name or "EMPTY"))
         else
             compareTitle.Text = if selected == installed and selected then "INSTALLED" else "SELECT A COMPONENT TO COMPARE"
         end
@@ -315,6 +392,12 @@ function Panel.Start(remotes, cameraMode)
             refresh()
         end)
     end
+    for key, b in pairs(avButtons) do
+        b.MouseButton1Click:Connect(function()
+            avSlot, selected = key, nil
+            refresh()
+        end)
+    end
     for i, row in ipairs(rows) do
         row.button.MouseButton1Click:Connect(function()
             local o = options[i]
@@ -324,14 +407,15 @@ function Panel.Start(remotes, cameraMode)
             end
         end)
     end
-    install.MouseButton1Click:Connect(function()
+    local function performInstall()
         local req = request()
         if candidate and req then
             remotes.RequestLoadout:FireServer(req)
             selected = nil
             pendingMessage, pendingAt = "INSTALLING...", os.clock()
         end
-    end)
+    end
+    install.MouseButton1Click:Connect(performInstall)
     revert.MouseButton1Click:Connect(function()
         if state.canRevert then
             remotes.RequestLoadoutRevert:FireServer()
@@ -384,6 +468,11 @@ function Panel.Start(remotes, cameraMode)
         elseif command == "slot" then
             slot, selected = a, nil
             refresh()
+        elseif command == "avslot" then
+            avSlot, selected = a, nil
+            refresh()
+        elseif command == "install" then
+            performInstall()
         elseif command == "select" then
             selected = a
             refresh()

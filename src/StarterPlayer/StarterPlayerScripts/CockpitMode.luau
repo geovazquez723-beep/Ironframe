@@ -7,6 +7,9 @@
 -- GarageCamera.SetActive() so exactly one of them writes the camera at any time. During a transition CockpitMode writes
 -- the camera itself, blending between the two poses under a dip-to-black so the lens never visibly crosses the hull.
 --
+-- M11C: this is also the ONE camera controller for optical zoom. The AvionicsClient owns the zoom state (ZoomControl) and answers `Camera(baseFov)`;
+-- no second controller touches the camera. Every path that ends the cockpit view calls `avionics.Reset`, so no zoom or thermal state survives it.
+--
 -- Safe ejection is NOT reimplemented: the server's Ejection state machine runs unchanged and publishes the mech's
 -- `State` attribute. This module only reacts: warning, camera out of the mech, "PILOT EVACUATED", then restore.
 
@@ -21,6 +24,8 @@ local Telemetry = require(Shared:WaitForChild("Telemetry"))
 local Builder = require(script.Parent:WaitForChild("CockpitBuilder"))
 local Hud = require(script.Parent:WaitForChild("CockpitHud"))
 local Audio = require(script.Parent:WaitForChild("CockpitAudio"))
+local Warnings = require(Shared:WaitForChild("CockpitWarnings"))
+local Avionics = require(Shared:WaitForChild("Avionics"))
 
 local player = Players.LocalPlayer
 local COLORS = Config.COLORS
@@ -52,6 +57,10 @@ local hintToken = 0
 local perf = { stepMs = 0, samples = 0 }
 local modeButton: TextButton, ejectButton: TextButton, controlsGui: ScreenGui
 local cursorFree = false
+local avionics: any = nil -- AvionicsClient (set by IronframeClient): zoom state, thermal view, tracking
+local packageInfo: { id: string, palette: string, equipment: { string } } = { id = "CKP_STANDARD", palette = "INDUSTRIAL", equipment = {} }
+local pendingPackage: any = nil
+local lastWarnAt = 0
 
 local function now(): number
     return os.clock()
@@ -171,9 +180,43 @@ local function ensureBuilt()
     end
     -- AI decoration is replicated by the server a moment after join; give it a short window so it is not skipped.
     ReplicatedStorage:WaitForChild("IronframeCockpitAssets", 5)
-    cockpit = Builder.Build()
-    Hud.Build(cockpit, player:WaitForChild("PlayerGui"))
+    cockpit = Builder.Build(packageInfo)
+    Hud.Build(cockpit, player:WaitForChild("PlayerGui"), packageInfo.palette)
     Audio.Start()
+    Audio.SetPackage(packageInfo.palette)
+end
+
+-- Equipment package (M11C): a different package is a different interior, so the model and the displays are rebuilt. This only happens in the
+-- garage view (a package can only be installed while stowed); inside the cockpit the change waits until the pilot leaves.
+local function rebuildPackage(info)
+    local old = cockpit
+    packageInfo = info
+    cockpit = Builder.Build(info)
+    Hud.Rebuild(cockpit, player:WaitForChild("PlayerGui"), info.palette)
+    Audio.SetPackage(info.palette)
+    if old then
+        old.model:Destroy()
+    end
+    bootDone = false
+    hiddenFor = nil
+end
+
+function Mode.ApplyPackage(info: any)
+    if type(info) ~= "table" or type(info.id) ~= "string" or info.id == packageInfo.id then
+        return
+    end
+    local clean = { id = info.id, palette = info.palette or "INDUSTRIAL", equipment = info.equipment or {} }
+    if not cockpit then
+        packageInfo = clean
+    elseif interiorActive then
+        pendingPackage = clean
+    else
+        rebuildPackage(clean)
+    end
+end
+
+function Mode.PackageId(): string
+    return packageInfo.id
 end
 
 local function setInterior(active: boolean)
@@ -195,6 +238,14 @@ local function setInterior(active: boolean)
     else
         restoreExterior()
         restoreLighting()
+        if avionics then
+            avionics.Reset("interior off", true)
+        end
+        if pendingPackage then
+            local info = pendingPackage
+            pendingPackage = nil
+            rebuildPackage(info)
+        end
     end
 end
 
@@ -219,18 +270,52 @@ end
 -- ----------------------------------------------------------------------------------------------------------------
 -- Startup sequence
 -- ----------------------------------------------------------------------------------------------------------------
-local BOOT_LINES = {
-    { 0.5, "REACTOR CORE ........... STARTUP" },
-    { 1.2, "COOLANT LOOPS .......... PRESSURIZED" },
-    { 1.9, "HYDRAULICS ............. NOMINAL" },
-    { 2.6, "SENSOR ARRAY ........... ALIGNED" },
-    { 3.3, "FIRE CONTROL ........... STANDBY" },
-    { 4.0, "LIFE SUPPORT ........... NOMINAL" },
-    { 4.6, "PILOT RESTRAINTS ....... LOCKED" },
-    { 5.1, "EJECTION SYSTEM ........ ARMED / PILOT SAFE" },
-}
-local DISPLAY_SCHEDULE = { Overhead = 2.2, MFD_L = 2.6, MFD_C = 2.9, MFD_R = 3.2, ConsoleL = 3.5, ConsoleR = 3.8 }
-local ONLINE_TEXT = "IF-42 BASTION \u{2014} SYSTEMS ONLINE"
+-- Startup log (M11C): the line set follows the installed equipment; a sensor line appears only for a module that is really fitted.
+local function bootLines(): { { number | string } }
+    local spec = Telemetry.Value("avionics.spec", nil)
+    local installed = spec and spec.installed or {}
+    local function short(slot: string): string
+        return Avionics.Short[installed[slot] or ""] or "---"
+    end
+    if packageInfo.palette == "RECON" then
+        local lines = {
+            { 0.5, "REACTOR CORE ........... STARTUP" },
+            { 1.0, "COOLANT LOOPS .......... PRESSURIZED" },
+            { 1.5, "SENSOR MAST ............ DEPLOYED" },
+            { 2.0, string.format("RADAR %s ........... ALIGNED", short("radar")) },
+        }
+        local t = 2.5
+        if installed.thermal then
+            table.insert(lines, { t, string.format("THERMAL %s ........ FPA COOLDOWN", short("thermal")) })
+            t += 0.5
+        end
+        if installed.optics then
+            table.insert(lines, { t, string.format("OPTICS %s ........... CALIBRATED", short("optics")) })
+            t += 0.5
+        end
+        table.insert(lines, { t, "RECON MFD LINK ........ SYNCHRONIZED" })
+        t += 0.6
+        table.insert(lines, { t, if installed.targeting then string.format("TRACKER %s .......... CALIBRATED", short("targeting")) else "FIRE CONTROL ........... STANDBY" })
+        table.insert(lines, { 4.5, "PILOT RESTRAINTS ....... LOCKED" })
+        table.insert(lines, { 5.1, "EJECTION SYSTEM ........ ARMED / PILOT SAFE" })
+        return lines
+    end
+    local lines = {
+        { 0.5, "REACTOR CORE ........... STARTUP" },
+        { 1.2, "COOLANT LOOPS .......... PRESSURIZED" },
+        { 1.9, "HYDRAULICS ............. NOMINAL" },
+        { 2.6, if installed.radar then string.format("RADAR %s ........... ALIGNED", short("radar")) else "SENSOR ARRAY ........... NOT FITTED" },
+        { 3.3, "FIRE CONTROL ........... STANDBY" },
+        { 4.0, "LIFE SUPPORT ........... NOMINAL" },
+        { 4.6, "PILOT RESTRAINTS ....... LOCKED" },
+        { 5.1, "EJECTION SYSTEM ........ ARMED / PILOT SAFE" },
+    }
+    return lines
+end
+local DISPLAY_SCHEDULE = { Overhead = 2.2, MFD_L = 2.6, MFD_C = 2.9, MFD_R = 3.2, ConsoleL = 3.5, ConsoleR = 3.8, AuxL = 4.0, AuxR = 4.3 }
+local function onlineText(): string
+    return if packageInfo.palette == "RECON" then "IF-42 BASTION RC-7 \u{2014} SENSOR NET ONLINE" else "IF-42 BASTION \u{2014} SYSTEMS ONLINE"
+end
 
 local function finishBoot()
     boot = nil
@@ -247,7 +332,7 @@ end
 local function startBoot(full: boolean)
     ensureBuilt()
     Hud.SetBootLog({})
-    Hud.SetBanner("", COLORS.cyan, 1)
+    Hud.SetBanner("", Hud.Colors().primary, 1)
     if full then
         bootDone = false
         boot = { t0 = now(), skipped = false, lines = 0, bannerShown = false, displaysOn = {} }
@@ -267,7 +352,7 @@ local function startBoot(full: boolean)
         task.delay(0.35, function()
             if interiorActive and (mode == Mode.COCKPIT or transition) then
                 finishBoot()
-                Hud.SetBanner(ONLINE_TEXT, COLORS.cyan, 0)
+                Hud.SetBanner(onlineText(), Hud.Colors().primary, 0)
                 task.delay(1.4, function()
                     Hud.FadeBanner(1.0)
                 end)
@@ -284,7 +369,7 @@ local function stepBoot()
     local t = now() - b.t0
     if b.skipped or t >= Config.BOOT_DURATION + 3 then
         finishBoot()
-        Hud.SetBanner(ONLINE_TEXT, COLORS.cyan, 0)
+        Hud.SetBanner(onlineText(), Hud.Colors().primary, 0)
         task.delay(1.4, function()
             Hud.FadeBanner(1.0)
         end)
@@ -330,7 +415,7 @@ local function stepBoot()
 
     -- Diagnostics log
     local lines = {}
-    for _, entry in ipairs(BOOT_LINES) do
+    for _, entry in ipairs(bootLines()) do
         if t >= entry[1] then
             table.insert(lines, entry[2])
         end
@@ -342,7 +427,7 @@ local function stepBoot()
     if t >= 5.6 and not b.bannerShown then
         b.bannerShown = true
         Hud.SetStatusLine("SYSTEMS ONLINE")
-        Hud.SetBanner(ONLINE_TEXT, COLORS.cyan, 0)
+        Hud.SetBanner(onlineText(), Hud.Colors().primary, 0)
     end
     if t >= Config.BOOT_DURATION + 2.2 then
         Hud.FadeBanner(1.2)
@@ -371,6 +456,9 @@ local function beginTransition(to: string, duration: number?, evac: boolean?)
         end
     end
     ensureBuilt() -- the fade layer and displays live in the HUD; build before the first transition frame
+    if avionics and to == Mode.GARAGE then
+        avionics.Reset("leave cockpit", true) -- 1x, imager off, lock released, before the camera pose is captured
+    end
     deps.garage.SetActive(false) -- hands over cleanly: drags released, keys ignored
     resetLook()
     transition = { t0 = now(), duration = duration or Config.TRANSITION, to = to, fromCF = cf, fromFov = fov, swapped = false, evac = evac }
@@ -379,7 +467,7 @@ local function beginTransition(to: string, duration: number?, evac: boolean?)
 end
 
 local function eyeCFrame(torsoCF: CFrame, t: number): (CFrame, number)
-    local scale = comfort()
+    local scale = comfort() * (if avionics then avionics.ShakeScale() else 1)
     local sway = Config.SWAY * scale
     local vib = Config.VIBRATION * scale
     local swayYaw = sway * (math.sin(t * 0.37) + 0.6 * math.sin(t * 0.91 + 1.3))
@@ -391,11 +479,16 @@ local function eyeCFrame(torsoCF: CFrame, t: number): (CFrame, number)
     local camera = workspace.CurrentCamera
     local aspect = camera.ViewportSize.X / math.max(camera.ViewportSize.Y, 1)
     local capped = 2 * math.deg(math.atan(math.tan(math.rad(Config.MAX_HFOV / 2)) / aspect))
-    return rotated, math.clamp(math.min(Config.FOV, capped), 40, Config.FOV)
+    local baseFov = math.clamp(math.min(Config.FOV, capped), 40, Config.FOV)
+    -- M11C optical zoom: true magnification of the baseline field of view (tan(fov / 2) shrinks m-fold); 1x leaves it untouched
+    return rotated, if avionics then avionics.Camera(baseFov) else baseFov
 end
 
 local function swapIn()
     local model = getModel()
+    if avionics then
+        avionics.Reset("enter cockpit", false)
+    end
     setInterior(true)
     if model and lastTorsoCF then
         hideExterior(model, lastTorsoCF)
@@ -506,6 +599,9 @@ local function onEvacuated()
         return
     end
     evacuation = { t0 = now(), restoreCockpit = true, phase = "WARNING", exiting = false, exitAt = now() + 0.45 }
+    if avionics then
+        avionics.Reset("safe ejection", false)
+    end
     Hud.SetEvacuation("WARNING")
     Hud.SetStatusLine("EVACUATION")
     Audio.Blip(0.9)
@@ -523,6 +619,9 @@ local function watchModel(model: Model?)
         watchConn = nil
     end
     watched = model
+    if avionics then
+        avionics.Reset("machine changed", false) -- a rebuilt machine (loadout install, ejection rebuild, respawn) starts at 1x
+    end
     if model then
         watchConn = model:GetAttributeChangedSignal("State"):Connect(function()
             if model:GetAttribute("State") == "PILOT_EVACUATED" then
@@ -631,7 +730,47 @@ function Mode.Stats()
         look = { yaw = math.deg(look.yaw), pitch = math.deg(look.pitch) },
         audio = Audio.Report(),
         displays = Hud.DisplayKeys(),
+        package = packageInfo.id, palette = Hud.Palette(), equipment = packageInfo.equipment,
+        annunciators = if cockpit then #Warnings.Keys else 0,
     }
+end
+
+-- ----------------------------------------------------------------------------------------------------------------
+-- Annunciators (M11C): six dash lamps from real telemetry, and the recon sensor bank's status lamps
+-- ----------------------------------------------------------------------------------------------------------------
+function Mode.UpdateWarnings(t: number)
+    local c = cockpit
+    if not c then
+        return
+    end
+    local fractions = Telemetry.Value("damage.regions", nil)
+    local capacity = math.max(Telemetry.Value("energy.capacity", 160), 1)
+    local st = Telemetry.Value("avionics.state", nil)
+    local rd = st and st.rd
+    local arms = 0
+    if fractions then
+        arms = (if (fractions.ARM_L or 1) <= 0 then 1 else 0) + (if (fractions.ARM_R or 1) <= 0 then 1 else 0)
+    end
+    local levels = Warnings.Evaluate({
+        deployed = Telemetry.Value("deployment.state", "STOWED") == "ACTIVE",
+        capFraction = Telemetry.Value("energy.charge", capacity) / capacity,
+        reactorFraction = fractions and fractions.REACTOR or 1, reactorFactor = Telemetry.Value("damage.reactor", 1),
+        coreFraction = fractions and fractions.CORE or 1, thermal = Telemetry.Value("energy.thermal", 0),
+        radarFitted = Telemetry.Value("avionics.hasRadar", false), radarState = rd and rd.s or nil,
+        impaired = st ~= nil and st.notes ~= nil and #st.notes > 0, armsFailed = arms,
+    })
+    local blink = if (t * 2.5) % 1 < 0.5 then 1 else 0.15
+    for key, level in pairs(levels) do
+        Builder.SetAnnunciator(c, key, level, blink)
+    end
+    Builder.SetStatusLamp(c, "RADAR", rd ~= nil and rd.s == "ONLINE")
+    Builder.SetStatusLamp(c, "THERMAL", st ~= nil and st.th ~= nil and st.th.on == true)
+    Builder.SetStatusLamp(c, "OPTICS", st ~= nil and (st.zm or 1) > 1)
+    Builder.SetStatusLamp(c, "LOCK", st ~= nil and st.lock ~= nil and st.lock.st == "TRACK")
+end
+
+function Mode.SetAvionics(client: any)
+    avionics = client
 end
 
 -- ----------------------------------------------------------------------------------------------------------------
@@ -656,8 +795,9 @@ local function step(dt: number)
         local key = UserInputService.IsKeyDown
         local dx = (key(UserInputService, Enum.KeyCode.Right) and 1 or 0) - (key(UserInputService, Enum.KeyCode.Left) and 1 or 0)
         local dy = (key(UserInputService, Enum.KeyCode.Up) and 1 or 0) - (key(UserInputService, Enum.KeyCode.Down) and 1 or 0)
-        look.targetYaw += dx * dt * Config.LOOK_KEY_RATE
-        look.targetPitch += dy * dt * Config.LOOK_KEY_RATE
+        local lookScale = if avionics then avionics.LookScale() else 1
+        look.targetYaw += dx * dt * Config.LOOK_KEY_RATE * lookScale
+        look.targetPitch += dy * dt * Config.LOOK_KEY_RATE * lookScale
         look.targetYaw = math.clamp(look.targetYaw, -Config.MAX_YAW, Config.MAX_YAW)
         look.targetPitch = math.clamp(look.targetPitch, -Config.MAX_PITCH_DOWN, Config.MAX_PITCH_UP)
         local alpha = 1 - math.exp(-Config.LOOK_SMOOTH * dt)
@@ -694,7 +834,24 @@ local function step(dt: number)
         end
         local look3 = camera.CFrame.LookVector
         Hud.SetHeading(math.deg(math.atan2(look3.X, -look3.Z)))
+        if model then
+            local chassisCF = deps.animator.ChassisCF(model)
+            if typeof(chassisCF) == "CFrame" then
+                local forward = chassisCF.LookVector
+                Hud.SetChassisHeading(math.deg(math.atan2(forward.X, -forward.Z)))
+            end
+        end
         Hud.Step(dt, t)
+        if t - lastWarnAt > 0.1 then
+            lastWarnAt = t
+            Mode.UpdateWarnings(t)
+        end
+    end
+    if avionics then
+        avionics.Step(dt, interiorActive and mode == Mode.COCKPIT and not transition and not evacuation)
+        if cockpit then
+            Builder.SetCanopyClear(cockpit, avionics.ThermalActive())
+        end
     end
     if evacuation then
         stepEvacuation(t)
@@ -797,6 +954,15 @@ function Mode.Start(dependencies)
     folder.Parent = workspace
     buildControls()
     Audio.Start()
+    Telemetry.Subscribe(function(key, channel)
+        if key == "loadout.cockpit" then
+            Mode.ApplyPackage(channel.value)
+        end
+    end)
+    local current = Telemetry.Value("loadout.cockpit", nil)
+    if current then
+        Mode.ApplyPackage(current)
+    end
     task.defer(ensureBuilt) -- pre-build the interior during the garage view so entering never hitches
 
     -- Studio verification interface (client-side only): drive the same public functions the keys and buttons use.
@@ -854,8 +1020,9 @@ function Mode.Start(dependencies)
     end)
     UserInputService.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement and mode == Mode.COCKPIT and not transition and not cursorFree and not evacuation then
-            look.targetYaw = math.clamp(look.targetYaw + input.Delta.X * Config.LOOK_SENSITIVITY, -Config.MAX_YAW, Config.MAX_YAW)
-            look.targetPitch = math.clamp(look.targetPitch - input.Delta.Y * Config.LOOK_SENSITIVITY, -Config.MAX_PITCH_DOWN, Config.MAX_PITCH_UP)
+            local lookScale = if avionics then avionics.LookScale() else 1
+            look.targetYaw = math.clamp(look.targetYaw + input.Delta.X * Config.LOOK_SENSITIVITY * lookScale, -Config.MAX_YAW, Config.MAX_YAW)
+            look.targetPitch = math.clamp(look.targetPitch - input.Delta.Y * Config.LOOK_SENSITIVITY * lookScale, -Config.MAX_PITCH_DOWN, Config.MAX_PITCH_UP)
         end
     end)
     RunService:BindToRenderStep("IronframeCockpitMode", Enum.RenderPriority.Camera.Value + 2, step)

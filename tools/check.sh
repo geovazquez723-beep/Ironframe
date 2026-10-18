@@ -16,4 +16,5 @@ for f in $files; do "$LUAU_BIN/luau-compile.exe" --text "$f" >/dev/null 2>/tmp/i
 "$LUAU_BIN/luau.exe" tools/enemy_tests.luau || rc=1
 "$LUAU_BIN/luau.exe" tools/loadout_tests.luau || rc=1
 "$LUAU_BIN/luau.exe" tools/fidelity_tests.luau || rc=1
+"$LUAU_BIN/luau.exe" tools/avionics_tests.luau || rc=1
 exit ${rc:-0}

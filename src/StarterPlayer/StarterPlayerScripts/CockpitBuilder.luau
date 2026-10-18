@@ -13,9 +13,14 @@
 --   overhead equipment panel                    y = 5.2       diagnostic display + status LEDs
 --   seat, control sticks, pedals, ribs, conduit, wiring, equipment housings
 -- The central forward cone (+-37 deg wide, +21/-15 deg tall) is free of structure except two hairline mullions.
+--
+-- M11C: the same frame carries two equipment PACKAGES (a `cockpit` registry entry compiled into the build). STANDARD is the industrial interior above
+-- (amber and green). RECON RETROFIT adds auxiliary sensor monitors on swing arms (outside the forward cone), a sensor control bank with status lamps,
+-- a roof sensor head, and a blue-white tactical lamp palette. Both carry a six-lamp annunciator strip whose lamps are driven by real telemetry.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("IronframeShared"):WaitForChild("CockpitConfig"))
+local Layouts = require(ReplicatedStorage:WaitForChild("IronframeShared"):WaitForChild("CockpitLayouts"))
 
 local Builder = {}
 
@@ -40,6 +45,12 @@ export type Cockpit = {
     lights: { { light: PointLight, brightness: number, baseColor: Color3 } },
     glowParts: { { part: Part, onColor: Color3, offColor: Color3 } },
     stats: { parts: number, meshParts: number, screens: number, indicators: number, lights: number, aiAssets: { string } },
+    canopy: Part?,
+    annunciators: { [string]: { part: Part, off: Color3 } },
+    statusLamps: { [string]: { part: Part, off: Color3, on: Color3 } },
+    package: string,
+    palette: string,
+    equipment: { string },
 }
 
 -- AI mesh templates live in ReplicatedStorage/IronframeCockpitAssets (written by the server, read-only here).
@@ -52,7 +63,12 @@ local function findTemplate(id: string): Model?
     return nil
 end
 
-function Builder.Build(): Cockpit
+local function color3(t: { number }): Color3
+    return Color3.fromRGB(t[1], t[2], t[3])
+end
+
+-- info = { id, palette, equipment } from the compiled build (`compiled.cockpit`); nil builds the factory STANDARD interior.
+function Builder.Build(info: { id: string, palette: string, equipment: { string } }?): Cockpit
     local model = Instance.new("Model")
     model.Name = "IronframeCockpit"
     local root = Instance.new("Part")
@@ -64,9 +80,21 @@ function Builder.Build(): Cockpit
     root.Parent = model
     model.PrimaryPart = root
 
+    local paletteData = Layouts.Palette(info and info.palette)
+    local equipment: { string } = if info then info.equipment else {}
+    local has = {}
+    for _, name in ipairs(equipment) do
+        has[name] = true
+    end
+    local PAL = {
+        primary = color3(paletteData.primary), secondary = color3(paletteData.secondary), warn = color3(paletteData.warn),
+        dash = color3(paletteData.light.dash), console = color3(paletteData.light.console), fill = color3(paletteData.light.fill),
+        strip = color3(paletteData.light.strip), strip2 = color3(paletteData.light.strip2), scale = paletteData.lightScale,
+    }
     local cockpit: Cockpit = {
         model = model, root = root, screens = {}, indicators = {}, lights = {}, glowParts = {},
         stats = { parts = 1, meshParts = 0, screens = 0, indicators = 0, lights = 0, aiAssets = {} },
+        canopy = nil, annunciators = {}, statusLamps = {}, package = if info then info.id else "CKP_STANDARD", palette = paletteData.name, equipment = equipment,
     }
     local stats = cockpit.stats
 
@@ -112,7 +140,8 @@ function Builder.Build(): Cockpit
     end
     local function strip(name: string, size: Vector3, cf: CFrame, color: Color3)
         local part = P(name, size, cf, color:Lerp(DARK, 0.9), NEON)
-        table.insert(cockpit.glowParts, { part = part, onColor = color, offColor = color:Lerp(DARK, 0.9) })
+        local bright = color:Lerp(DARK, 0.55) -- bloom is strong in daylight; the frame strips stay restrained so they never overpower the outside view
+        table.insert(cockpit.glowParts, { part = part, onColor = bright, offColor = color:Lerp(DARK, 0.9) })
         return part
     end
     local function lamp(name: string, position: Vector3, color: Color3, brightness: number, range: number)
@@ -183,14 +212,14 @@ function Builder.Build(): Cockpit
         for i = 0, 2 do
             cylY("EquipKnob" .. t .. i, 0.09, 0.12, C(s * 2.1, 5.05, -0.35 + i * 0.25), STEEL)
         end
-        led("EquipLed" .. t, C(s * 2.1, 5.2, 0.3), COLORS.amber, "equip", 4 + (if s < 0 then 0 else 1))
-        led("EquipLedB" .. t, C(s * 2.1, 5.2, 0.45), COLORS.cyan, "equip", 6 + (if s < 0 then 0 else 1))
+        led("EquipLed" .. t, C(s * 2.1, 5.2, 0.3), PAL.secondary, "equip", 4 + (if s < 0 then 0 else 1))
+        led("EquipLedB" .. t, C(s * 2.1, 5.2, 0.45), PAL.primary, "equip", 6 + (if s < 0 then 0 else 1))
         -- Ceiling cable harness
         cable("Harness" .. t .. "A", V(s * 2.3, 5.45, -3.0), V(s * 2.3, 5.45, 1.8), 0.16)
         cable("Harness" .. t .. "B", V(s * 2.1, 5.4, -3.0), V(s * 1.7, 5.45, -1.0), 0.1)
         cable("Harness" .. t .. "C", V(s * 2.45, 3.25, -3.0), V(s * 2.45, 3.25, 1.6), 0.12)
         cable("Harness" .. t .. "D", V(s * 2.4, 3.1, -2.6), V(s * 2.0, 2.65, -2.6), 0.1)
-        strip("CeilingStrip" .. t, V(0.06, 0.04, 3.4), C(s * 1.8, 5.5, -0.9), COLORS.cyan)
+        strip("CeilingStrip" .. t, V(0.06, 0.04, 3.4), C(s * 1.8, 5.5, -0.9), PAL.strip)
     end
 
     -- Canopy: sill, header, brow, glass and hairline mullions (kept off the central cone).
@@ -200,7 +229,7 @@ function Builder.Build(): Cockpit
     end
     P("Header", V(5.3, 0.55, 0.6), C(0, 5.38, -3.3), GUN)
     P("Brow", V(5.3, 0.28, 1.1), C(0, 5.5, -2.8) * A(0.18, 0, 0), GRAPH)
-    P("Canopy", V(4.7, 2.0, 0.04), C(0, 4.5, -3.52), Color3.fromRGB(110, 190, 210), GLASS, { Transparency = 0.9 })
+    cockpit.canopy = P("Canopy", V(4.7, 2.0, 0.04), C(0, 4.5, -3.52), Color3.fromRGB(110, 190, 210), GLASS, { Transparency = 0.9 })
     for _, s in ipairs({ -1, 1 }) do
         P("Mullion", V(0.07, 2.0, 0.1), C(s * 1.55, 4.5, -3.5), STEEL)
     end
@@ -229,7 +258,7 @@ function Builder.Build(): Cockpit
         label.Text = text
         label.Font = Enum.Font.RobotoMono
         label.TextScaled = true
-        label.TextColor3 = color or COLORS.amber
+        label.TextColor3 = color or PAL.secondary
         label.Parent = gui
         return plate
     end
@@ -249,7 +278,7 @@ function Builder.Build(): Cockpit
             for v = 0, 3 do
                 P("WallModuleVent" .. t .. i .. v, V(0.05, 0.05, 0.5), module * C(s * -0.1, -0.2 + v * 0.1, 0), STEEL)
             end
-            led("WallModuleLed" .. t .. i, module * C(s * -0.1, 0.27, -0.28), if (i + (s < 0 and 0 or 1)) % 2 == 0 then COLORS.cyan else COLORS.amber, "wall", 20 + i * 2 + (s < 0 and 0 or 1), V(0.04, 0.04, 0.04))
+            led("WallModuleLed" .. t .. i, module * C(s * -0.1, 0.27, -0.28), if (i + (s < 0 and 0 or 1)) % 2 == 0 then PAL.primary else PAL.secondary, "wall", 20 + i * 2 + (s < 0 and 0 or 1), V(0.04, 0.04, 0.04))
         end
         -- cable bundles with clamps along the walls
         for row, y in ipairs({ 3.55, 4.75, 5.05 }) do
@@ -258,8 +287,8 @@ function Builder.Build(): Cockpit
                 P("CableClamp" .. t .. row .. i, V(0.12, 0.16, 0.1), C(s * 2.38, y, -3.0 + i * 1.15), STEEL)
             end
         end
-        placard("PlacardCoolant" .. t, if s < 0 then "COOLANT LOOP A" else "COOLANT LOOP B", V(0.55, 0.12, 0.03), C(s * 2.34, 3.45, -2.9) * A(0, s * math.pi / 2, 0), COLORS.amber)
-        placard("PlacardPower" .. t, if s < 0 then "AUX POWER" else "REACTOR FEED", V(0.5, 0.12, 0.03), C(s * 2.34, 4.5, -1.45) * A(0, s * math.pi / 2, 0), COLORS.cyan)
+        placard("PlacardCoolant" .. t, if s < 0 then "COOLANT LOOP A" else "COOLANT LOOP B", V(0.55, 0.12, 0.03), C(s * 2.34, 3.45, -2.9) * A(0, s * math.pi / 2, 0), PAL.secondary)
+        placard("PlacardPower" .. t, if s < 0 then "AUX POWER" else "REACTOR FEED", V(0.5, 0.12, 0.03), C(s * 2.34, 4.5, -1.45) * A(0, s * math.pi / 2, 0), PAL.primary)
     end
     -- roof: longitudinal conduits, vents, hanging cable loops
     for _, x in ipairs({ -1.2, -0.45, 0.45, 1.2 }) do
@@ -271,8 +300,8 @@ function Builder.Build(): Cockpit
             P("RoofVentSlat" .. i .. v, V(1.0, 0.03, 0.04), C(0, 5.6, -0.52 + i * 0.7 + v * 0.1), DARK)
         end
     end
-    placard("PlacardCanopy", "CANOPY SEAL  NOMINAL", V(0.9, 0.12, 0.03), C(0, 5.12, -3.0) * A(0.1, 0, 0), COLORS.amber)
-    placard("PlacardEject", "EJECTION ARMED  PILOT SAFE", V(1.2, 0.12, 0.03), C(0, 2.95, 1.9), COLORS.cyan)
+    placard("PlacardCanopy", "CANOPY SEAL  NOMINAL", V(0.9, 0.12, 0.03), C(0, 5.12, -3.0) * A(0.1, 0, 0), PAL.secondary)
+    placard("PlacardEject", "EJECTION ARMED  PILOT SAFE", V(1.2, 0.12, 0.03), C(0, 2.95, 1.9), PAL.primary)
     -- floor footplates and hazard step
     for _, x in ipairs({ -1.2, 1.2 }) do
         P("FootPlate" .. x, V(0.9, 0.08, 1.2), C(x, 2.56, -1.4), GRAPH, Enum.Material.DiamondPlate)
@@ -282,11 +311,11 @@ function Builder.Build(): Cockpit
     end
 
     -- Edge lighting: thin emissive strips that define the canopy frame, dash lip and console edges
-    strip("SillGlow", V(4.5, 0.03, 0.03), C(0, 3.45, -3.04), COLORS.cyan)
-    strip("HeaderGlow", V(4.5, 0.03, 0.03), C(0, 5.08, -3.05), COLORS.cyan)
+    strip("SillGlow", V(4.5, 0.03, 0.03), C(0, 3.45, -3.04), PAL.primary)
+    strip("HeaderGlow", V(4.5, 0.03, 0.03), C(0, 5.08, -3.05), PAL.primary)
     for _, s in ipairs({ -1, 1 }) do
-        strip("PillarGlow" .. s, V(0.03, 1.5, 0.03), C(s * 2.2, 4.5, -3.05), COLORS.cyan)
-        strip("WallFloorGlow" .. s, V(0.03, 0.03, 4.2), C(s * 2.4, 2.62, -1.0), COLORS.amber)
+        strip("PillarGlow" .. s, V(0.03, 1.5, 0.03), C(s * 2.2, 4.5, -3.05), PAL.primary)
+        strip("WallFloorGlow" .. s, V(0.03, 0.03, 4.2), C(s * 2.4, 2.62, -1.0), PAL.strip2)
     end
 
     -- ------------------------------------------------------------------------------------------------------------
@@ -308,7 +337,7 @@ function Builder.Build(): Cockpit
             local x = (i - (count + 1) / 2) * (0.9 / count) * 1.15
             local isLed = i % 2 == 0
             if isLed then
-                led("DashLed" .. row .. "_" .. i, strip3 * C(x, 0, -0.07), if (row + i) % 3 == 0 then COLORS.amber else COLORS.cyan, "dash", 8 + row + i)
+                led("DashLed" .. row .. "_" .. i, strip3 * C(x, 0, -0.07), if (row + i) % 3 == 0 then PAL.secondary else PAL.primary, "dash", 8 + row + i)
             else
                 P("DashSwitch" .. row .. "_" .. i, V(0.08, 0.1, 0.1), strip3 * C(x, 0, -0.07), STEEL)
             end
@@ -331,7 +360,7 @@ function Builder.Build(): Cockpit
             if i % 2 == 1 then
                 P("ConsoleToggle" .. t .. i, V(0.06, 0.1, 0.1), switchRow * C((i - 3) * 0.16, 0.06, -0.06), STEEL)
             else
-                led("ConsoleLed" .. t .. i, switchRow * C((i - 3) * 0.16, 0, -0.08), if s < 0 then COLORS.cyan else COLORS.amber, "console", 12 + i + (if s < 0 then 0 else 2))
+                led("ConsoleLed" .. t .. i, switchRow * C((i - 3) * 0.16, 0, -0.08), if s < 0 then PAL.primary else PAL.secondary, "console", 12 + i + (if s < 0 then 0 else 2))
             end
         end
         -- Rotary selectors and conduit on the console shoulder
@@ -350,13 +379,13 @@ function Builder.Build(): Cockpit
     local overheadAim = V(0, eye.Y + 0.2, eye.Z)
     local ocf = screen("Overhead", 2.0, 0.5, V(0, 5.2, -1.7), overheadAim)
     for i = 1, 8 do
-        led("OverheadLed" .. i, ocf * C(-1.15 + i * 0.26, -0.33, -0.03), if i % 3 == 0 then COLORS.amber else COLORS.cyan, "overhead", i, V(0.045, 0.045, 0.03))
+        led("OverheadLed" .. i, ocf * C(-1.15 + i * 0.26, -0.33, -0.03), if i % 3 == 0 then PAL.secondary else PAL.primary, "overhead", i, V(0.045, 0.045, 0.03))
     end
     for _, s in ipairs({ -1, 1 }) do
         P("OverheadToggleBank" .. s, V(0.34, 0.12, 0.2), ocf * C(s * 1.2, -0.05, 0.05), STEEL)
         cable("OverheadFeed" .. s, V(s * 1.3, 5.45, -1.9), V(s * 1.9, 5.5, -3.0), 0.1)
     end
-    lamp("OverheadLamp", V(0, 5.3, -1.0), COLORS.cyan, 0.3, 6)
+    lamp("OverheadLamp", V(0, 5.3, -1.0), PAL.dash, 0.3 * PAL.scale, 6)
 
     -- ------------------------------------------------------------------------------------------------------------
     -- Seat, harness, hand controls, pedals
@@ -384,7 +413,7 @@ function Builder.Build(): Cockpit
             P("StickHat" .. s, V(0.1, 0.05, 0.1), C(sx, 4.4, sz - 0.14), COLORS.steel, METAL)
             P("StickGuard" .. s, V(0.04, 0.1, 0.12), C(sx - s * 0.14, 4.28, sz - 0.14), HAZARD, PLASTIC)
         end
-        led("StickLed" .. s, C(sx, 3.0, sz - 0.34), COLORS.amber, "stick", 16 + s)
+        led("StickLed" .. s, C(sx, 3.0, sz - 0.34), PAL.secondary, "stick", 16 + s)
         for i = 1, 2 do
             P("PedalBase" .. s .. i, V(0.5, 0.1, 0.7), C(s * 0.42 + (i - 1.5) * 0.0, 2.64, -1.35 - (i - 1) * 0.0) * A(-0.5, 0, 0), STEEL)
         end
@@ -393,10 +422,80 @@ function Builder.Build(): Cockpit
     -- ------------------------------------------------------------------------------------------------------------
     -- Lighting: dim cyan ambient, warm amber console glow
     -- ------------------------------------------------------------------------------------------------------------
-    lamp("DashCyan", V(0, 4.1, -1.9), COLORS.cyan, 0.55, 6)
-    lamp("ConsoleAmberL", V(-1.5, 3.3, -1.0), COLORS.amber, 0.35, 4)
-    lamp("ConsoleAmberR", V(1.5, 3.3, -1.0), COLORS.amber, 0.35, 4)
-    lamp("CabinFill", V(0, 4.6, 0.3), Color3.fromRGB(150, 190, 205), 0.3, 9)
+    lamp("DashCyan", V(0, 4.1, -1.9), PAL.dash, 0.55 * PAL.scale, 6)
+    lamp("ConsoleAmberL", V(-1.5, 3.3, -1.0), PAL.console, 0.35 * PAL.scale, 4)
+    lamp("ConsoleAmberR", V(1.5, 3.3, -1.0), PAL.console, 0.35 * PAL.scale, 4)
+    lamp("CabinFill", V(0, 4.6, 0.3), PAL.fill, 0.3 * PAL.scale, 9)
+
+    -- ------------------------------------------------------------------------------------------------------------
+    -- Annunciator strip (M11C): six lamps on the top bezels of the dash displays. Healthy = a dim steady lamp in the package colour; the HUD lights
+    -- them amber / red from real telemetry (capacitor, reactor housing, sensors, thermal load, weapon assemblies, core). Never an arbitrary alarm.
+    -- ------------------------------------------------------------------------------------------------------------
+    local frame = Layouts.Frame("BASTION_FRAME")
+    local lampAt = { CAP = { -1.36, 3.47 }, RCTR = { -0.74, 3.47 }, SENS = { -0.2, 3.5 }, THRM = { 0.2, 3.5 }, WPN = { 0.74, 3.47 }, CORE = { 1.36, 3.47 } }
+    for _, key in ipairs(frame.annunciators) do
+        local at = lampAt[key]
+        local off = PAL.primary:Lerp(DARK, 0.84)
+        local part = P("Annunciator_" .. key, V(0.085, 0.045, 0.04), C(at[1], at[2] + 0.55, -2.46), off, NEON)
+        cockpit.annunciators[key] = { part = part, off = off }
+    end
+    P("AnnunciatorRail", V(3.3, 0.02, 0.03), C(0, 4.0, -2.46), DARK, PLASTIC)
+
+    -- ------------------------------------------------------------------------------------------------------------
+    -- Equipment package fittings
+    -- ------------------------------------------------------------------------------------------------------------
+    local function vec(t: { number }): Vector3
+        return V(t[1], t[2], t[3])
+    end
+    if has.RECON_AUX_MONITORS then
+        for _, s in ipairs({ -1, 1 }) do
+            local mount = frame.mounts[if s < 0 then "auxLeft" else "auxRight"]
+            local key = if s < 0 then "AuxL" else "AuxR"
+            local pos = vec(mount.pos)
+            local cf = screen(key, 0.82, 0.58, pos, vec(mount.aim))
+            -- swing arm and wall bracket (the housing sits clear of the wall, outside the forward cone)
+            cable(key .. "Arm", V(s * 2.46, pos.Y + 0.1, pos.Z - 0.15), V(s * (math.abs(pos.X) + 0.18), pos.Y + 0.05, pos.Z + 0.12), 0.13, STEEL)
+            P(key .. "Bracket", V(0.18, 0.46, 0.34), C(s * 2.42, pos.Y + 0.1, pos.Z - 0.15), GRAPH)
+            P(key .. "Hinge", V(0.12, 0.12, 0.12), C(s * (math.abs(pos.X) + 0.1), pos.Y + 0.05, pos.Z + 0.1), STEEL, METAL, { Shape = Enum.PartType.Ball })
+            led(key .. "Led", cf * C(0.3, -0.4, -0.03), PAL.primary, "recon", 40 + (if s < 0 then 0 else 1), V(0.045, 0.045, 0.03))
+            led(key .. "LedB", cf * C(0.2, -0.4, -0.03), PAL.secondary, "recon", 42 + (if s < 0 then 0 else 1), V(0.045, 0.045, 0.03))
+            placard(key .. "Tag", if s < 0 then "TARGET ANALYSIS" else "SENSOR ARRAY", V(0.8, 0.09, 0.03), cf * C(-0.0, 0.38, -0.03), PAL.primary)
+            -- Sensor control bank under the SENSOR ARRAY monitor: four status lamps (lit only while that function is really active) with their toggles.
+            if s > 0 and has.RECON_SENSOR_BANK then
+                local bank = cf * C(0, -0.64, 0.02)
+                P("SensorBank", V(0.9, 0.22, 0.16), bank * C(0, 0, 0.08), GRAPH)
+                for i, name in ipairs({ "RADAR", "THERMAL", "OPTICS", "LOCK" }) do
+                    local x = -0.33 + (i - 1) * 0.22
+                    P("SensorToggle" .. name, V(0.06, 0.09, 0.09), bank * C(x, -0.03, -0.07), STEEL)
+                    local off, on = PAL.primary:Lerp(DARK, 0.88), PAL.primary
+                    local statusPart = P("SensorStatus_" .. name, V(0.07, 0.05, 0.03), bank * C(x, 0.07, -0.075), off, NEON)
+                    cockpit.statusLamps[name] = { part = statusPart, off = off, on = on }
+                    placard("SensorTag" .. name, string.sub(name, 1, 3), V(0.2, 0.05, 0.03), bank * C(x, -0.095, -0.075), PAL.secondary)
+                end
+                for i = 0, 1 do
+                    cylZ("SensorDial" .. i, 0.06, 0.11, bank * C(-0.41 + i * 0.82, 0.0, -0.075), STEEL, METAL)
+                end
+            end
+        end
+    end
+    if has.RECON_HOOD then
+        local mount = frame.mounts.hood
+        local pos = vec(mount.pos)
+        cylY("SensorHeadStem", 0.45, 0.22, C(pos.X, pos.Y + 0.22, pos.Z), GRAPH, METAL)
+        P("SensorHeadDome", V(0.56, 0.56, 0.56), C(pos.X, pos.Y - 0.1, pos.Z), DARK, METAL, { Shape = Enum.PartType.Ball })
+        P("SensorHeadBand", V(0.62, 0.05, 0.62), C(pos.X, pos.Y - 0.1, pos.Z), STEEL, METAL, { Shape = Enum.PartType.Cylinder })
+        led("SensorHeadLens", C(pos.X, pos.Y - 0.14, pos.Z - 0.27) * A(0.2, 0, 0), PAL.primary, "recon", 46, V(0.2, 0.12, 0.05))
+        strip("ReconRoofGlow", V(2.2, 0.03, 0.03), C(0, 5.5, pos.Z + 0.55), PAL.strip)
+        placard("PlacardRecon", "RC-7 RECON RETROFIT", V(1.2, 0.12, 0.03), C(0, 3.6, 2.05), PAL.primary)
+    else
+        -- industrial: unshaded work-lamp housings on the roof, heavy toggle guards on the overhead banks, a stamped plate on the bulkhead
+        for _, sx in ipairs({ -1, 1 }) do
+            P("WorkLampBody" .. sx, V(0.3, 0.22, 0.34), C(sx * 1.55, 5.52, -2.1), GRAPH)
+            P("WorkLampShade" .. sx, V(0.38, 0.06, 0.4), C(sx * 1.55, 5.4, -2.1), HAZARD, PLASTIC)
+            P("ToggleGuard" .. sx, V(0.3, 0.04, 0.2), C(sx * 1.2, 5.08, -1.58), HAZARD, PLASTIC)
+        end
+        placard("PlacardIndustrial", "ICC-1 INDUSTRIAL COMBAT COCKPIT", V(1.5, 0.12, 0.03), C(0, 3.6, 2.05), PAL.secondary)
+    end
 
     -- ------------------------------------------------------------------------------------------------------------
     -- AI-generated decorative assemblies (optional; the procedural cockpit above is complete without them)
@@ -487,6 +586,38 @@ function Builder.SetAlert(cockpit: Cockpit, amount: number)
     end
     for _, entry in ipairs(cockpit.lights) do
         entry.light.Color = if amount > 0 then entry.baseColor:Lerp(COLORS.red, 0.6 * amount) else entry.baseColor
+    end
+end
+
+-- level 0 = healthy (dim package colour), 1 = caution (amber), 2 = critical (red). `blink` (0..1) pulses the critical lamps only.
+function Builder.SetAnnunciator(cockpit: Cockpit, key: string, level: number, blink: number?)
+    local entry = cockpit.annunciators[key]
+    if not entry then
+        return
+    end
+    if level >= 2 then
+        entry.part.Color = COLORS.red:Lerp(DARK, 0.65 * (1 - (blink or 1)))
+    elseif level >= 1 then
+        entry.part.Color = COLORS.amber:Lerp(DARK, 0.25)
+    else
+        entry.part.Color = entry.off
+    end
+end
+
+-- Recon sensor bank status lamps (RADAR / THERMAL / OPTICS / LOCK): lit while that function is really active.
+function Builder.SetStatusLamp(cockpit: Cockpit, key: string, on: boolean)
+    local entry = cockpit.statusLamps[key]
+    if entry then
+        entry.part.Color = if on then entry.on:Lerp(DARK, 0.2) else entry.off
+    end
+end
+
+-- The thermal imager draws its glow with depth-tested highlights, and the glass of the canopy (nearly invisible, but solid to the depth test) would hide
+-- them. While the imager is on the glass is cleared; it is restored the moment the imager goes off.
+function Builder.SetCanopyClear(cockpit: Cockpit, clear: boolean)
+    local canopy = cockpit.canopy
+    if canopy then
+        canopy.Transparency = if clear then 1 else 0.9
     end
 end
 

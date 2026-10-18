@@ -12,13 +12,25 @@ local Shared = ReplicatedStorage:WaitForChild("IronframeShared")
 local Config = require(Shared:WaitForChild("CockpitConfig"))
 local Telemetry = require(Shared:WaitForChild("Telemetry"))
 local Components = require(Shared:WaitForChild("ComponentRegistry"))
+local Layouts = require(Shared:WaitForChild("CockpitLayouts"))
 
 local Hud = {}
 
+-- Palette (M11C). The two cockpit packages colour every instrument differently: STANDARD amber and green, RECON blue-white. The colours are
+-- upvalues set by applyPalette, and the displays are rebuilt (Hud.Rebuild) when the installed package changes, so every label picks up the new set.
 local COLORS = Config.COLORS
 local FONT_TITLE, FONT_DATA = Enum.Font.Michroma, Enum.Font.RobotoMono
-local CYAN, CYAN_DIM, AMBER, RED, WHITE, PANEL = COLORS.cyan, COLORS.cyanDim, COLORS.amber, COLORS.red, COLORS.white, COLORS.panel
-local DIM_TEXT = Color3.fromRGB(96, 140, 152)
+local CYAN, CYAN_DIM, AMBER, RED, WHITE, PANEL, DIM_TEXT = COLORS.cyan, COLORS.cyanDim, COLORS.amber, COLORS.red, COLORS.white, COLORS.panel, Color3.fromRGB(96, 140, 152)
+local paletteId = "INDUSTRIAL"
+local function rgb(t: { number }): Color3
+    return Color3.fromRGB(t[1], t[2], t[3])
+end
+local function applyPalette(id: string)
+    local p = Layouts.Palette(id)
+    paletteId = p.name
+    CYAN, CYAN_DIM, AMBER, RED, WHITE, PANEL, DIM_TEXT = rgb(p.primary), rgb(p.primaryDim), rgb(p.warn), rgb(p.crit), rgb(p.text), rgb(p.panel), rgb(p.dimText)
+end
+applyPalette("INDUSTRIAL")
 
 local SOCKETS = {
     { id = "left_arm", label = "L ARM", group = "ARMS" },
@@ -243,16 +255,16 @@ local function buildReactor(display: Display)
     gauge("heatGen", 150, "CAPACITOR", CYAN)
     widgets.heatStore = label(c, "STANDBY", UDim2.fromOffset(20, 188), UDim2.fromOffset(440, 20), { TextSize = 16, TextColor3 = DIM_TEXT, TextXAlignment = Enum.TextXAlignment.Right })
     widgets.rows = {}
-    local rows = { { "prop", "PROPULSION" }, { "weapons", "WEAPONS" }, { "shield", "SHIELD" } }
+    local rows = { { "prop", "PROPULSION" }, { "weapons", "WEAPONS" }, { "shield", "SHIELD" }, { "avionics", "AVIONICS" } }
     for i, row in ipairs(rows) do
-        local y = 212 + (i - 1) * 44
+        local y = 208 + (i - 1) * 40
         label(c, row[2], UDim2.fromOffset(20, y), UDim2.fromOffset(150, 22), { TextSize = 18, TextColor3 = WHITE })
         local tag = label(c, "", UDim2.fromOffset(160, y), UDim2.fromOffset(180, 22), { TextSize = 15, TextColor3 = CYAN, TextXAlignment = Enum.TextXAlignment.Right })
         local value = label(c, "---", UDim2.fromOffset(340, y), UDim2.fromOffset(120, 22), { TextSize = 18, TextColor3 = WHITE, TextXAlignment = Enum.TextXAlignment.Right })
         widgets.rows[row[1]] = { tag = tag, value = value, bar = bar(c, UDim2.fromOffset(20, y + 25), UDim2.fromOffset(440, 8), 0, CYAN) }
     end
-    gauge("cooling", 346, "THERMAL LOAD %", AMBER)
-    widgets.energyWarning = label(c, "", UDim2.fromOffset(20, 390), UDim2.fromOffset(440, 48), { TextSize = 17, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
+    gauge("cooling", 372, "THERMAL LOAD %", AMBER)
+    widgets.energyWarning = label(c, "", UDim2.fromOffset(20, 424), UDim2.fromOffset(440, 44), { TextSize = 16, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
     display.refresh = function()
         local m = Telemetry.Value("loadout.metrics", nil)
         local systems = Telemetry.Value("loadout.systems", {})
@@ -273,6 +285,9 @@ local function buildReactor(display: Display)
             widgets.heatStore.Text = string.format("%s  %+.1f u/s   SUPPLY %.1f", if flow > 0.5 then "CHARGING" elseif flow < -0.5 then "DISCHARGING" else "HOLDING", flow, Telemetry.Value("energy.supply", 0))
             widgets.heatStore.TextColor3 = if flow < -0.5 then AMBER else CYAN
             local limited = Telemetry.Value("energy.limited", "")
+            if Telemetry.Value("avionics.factor", 1) < 0.7 and Telemetry.Value("avionics.demand", 0) > 0.05 then
+                limited = if limited == "" then "AVIONICS" else limited .. "+AVIONICS"
+            end
             local focus = FOCUS_ROW[Telemetry.Value("energy.focus", "")]
             local function row(key: string, demandValue: number, name: string, extra: string)
                 local w = widgets.rows[key]
@@ -288,8 +303,13 @@ local function buildReactor(display: Display)
             row("prop", Telemetry.Value("energy.propulsion", 0), "SPRINT", if sprint > 0.5 then string.format("SPRINT %.0f", sprint) else "")
             row("weapons", math.max(Telemetry.Value("energy.weaponRate", 0), Telemetry.Value("energy.weaponDemand", 0)), "WEAPONS", Telemetry.Value("weapons.state", "SAFE"))
             row("shield", Telemetry.Value("energy.shieldDemand", 0), "SHIELD", Telemetry.Value("shield.state", "READY"))
+            local avFactor = Telemetry.Value("avionics.factor", 1)
+            local avDemand = Telemetry.Value("avionics.demand", 0)
+            local avSpec = Telemetry.Value("avionics.spec", nil)
+            row("avionics", avDemand * avFactor, "AVIONICS", if avDemand <= 0.05 and not (avSpec and avSpec.ratedPower > 0) then "NOT FITTED" elseif avDemand <= 0.05 then "STANDBY" elseif avFactor < 0.7 then string.format("STARVED %d%%", math.floor(avFactor * 100 + 0.5)) else string.format("%.1f REQ", avDemand))
             local reason = Telemetry.Value("shield.reason", "READY")
-            widgets.energyWarning.Text = if deficit > 0.1 then string.format("DEFICIT %.1f u/s  /  %s THROTTLED", deficit, if limited ~= "" then limited else "DISCRETIONARY LOADS")
+            widgets.energyWarning.Text = if limited == "AVIONICS" then "SENSORS STARVED  /  ADVANCED AVIONICS DEGRADED"
+                elseif deficit > 0.1 then string.format("DEFICIT %.1f u/s  /  %s THROTTLED", deficit, if limited ~= "" then limited else "DISCRETIONARY LOADS")
                 elseif limited ~= "" then string.format("%s HELD BY %s PROFILE", limited, Telemetry.Value("energy.profile", "BALANCED"))
                 elseif charge < 25 then "CAPACITOR LOW  /  SHIELD UNAVAILABLE" else reason
         end
@@ -370,73 +390,332 @@ local function buildArmament(display: Display)
     end
 end
 
--- DIAGNOSTICS (left console)
-local function buildDiagnostics(display: Display)
-    local c = display.content
-    widgets.diagLines = label(c, "", UDim2.fromOffset(18, 12), UDim2.new(1, -30, 1, -24), { TextSize = 21, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = WHITE })
-    display.refresh = function()
-        local tests, rig = Telemetry.Value("diag.tests", nil), Telemetry.Value("diag.rig", nil)
-        local m = Telemetry.Value("loadout.metrics", nil)
-        local lines = {}
-        if tests then
-            table.insert(lines, string.format("SELF-TEST      %d/%d  %s", tests.passed, tests.total, if #tests.failed == 0 then "PASS" else "FAIL"))
+-- Avionics state (M11C) --------------------------------------------------------------------------------------------------------
+-- The AvionicsClient publishes the latest server packet on the bus ("avionics.state"). Everything below reads it; nothing is animated for show.
+local BAND_SEGMENTS = { NOMINAL = 3, DAMAGED = 2, CRITICAL = 1, OFFLINE = 0 }
+local chassisHeading = 0
+local radarScaleIndex = 1
+local RADAR_SCALES = { 1, 0.5, 0.25 }
+
+local function avState(): any?
+    return Telemetry.Value("avionics.state", nil)
+end
+
+local function bandColor(band: string): Color3
+    return if band == "NOMINAL" then CYAN elseif band == "DAMAGED" then AMBER else RED
+end
+
+-- A component row: name, condition word and a three-segment bar (segments are the band, never a hidden number).
+local function buildBandRows(parent: Instance, count: number, x: number, y0: number, step: number, width: number, textSize: number): { any }
+    local rows = {}
+    for i = 1, count do
+        local y = y0 + (i - 1) * step
+        local name = label(parent, "", UDim2.fromOffset(x, y), UDim2.fromOffset(width * 0.5, step - 2), { TextSize = textSize, TextColor3 = WHITE })
+        local band = label(parent, "", UDim2.fromOffset(x + width * 0.5, y), UDim2.fromOffset(width * 0.32, step - 2), { TextSize = textSize - 2, TextColor3 = CYAN, TextXAlignment = Enum.TextXAlignment.Right })
+        local segs = {}
+        for k = 1, 3 do
+            segs[k] = box(parent, UDim2.fromOffset(x + width * 0.86 + (k - 1) * (width * 0.05), y + (step - 2) * 0.5 - 4), UDim2.fromOffset(width * 0.04, 8), CYAN, 0.1)
         end
-        if rig then
-            table.insert(lines, string.format("RIG           %d PARTS", rig.parts))
-            table.insert(lines, string.format("JOINTS        %d   LINKS %d", rig.joints, rig.links))
-            table.insert(lines, string.format("SOCKETS       %d/%d", rig.socketsFilled, rig.socketsTotal))
-            table.insert(lines, string.format("AI MESHES     %d", rig.meshParts or 0))
+        rows[i] = { name = name, band = band, segs = segs }
+    end
+    return rows
+end
+
+local function fillBandRows(rows: { any }, parts: { any }?)
+    for i, row in ipairs(rows) do
+        local part = parts and parts[i]
+        row.name.Visible, row.band.Visible = part ~= nil, part ~= nil
+        for _, seg in ipairs(row.segs) do
+            seg.Visible = part ~= nil
         end
-        if m then
-            table.insert(lines, string.format("MASS          %.1f/%.1f t", m.mass, m.massLimit))
-            table.insert(lines, string.format("NOMINAL DPS   %.0f", m.nominalDps))
+        if part then
+            local color = bandColor(part[2])
+            row.name.Text, row.band.Text = part[1], part[2]
+            row.band.TextColor3 = color
+            local filled = BAND_SEGMENTS[part[2]] or 0
+            for k, seg in ipairs(row.segs) do
+                seg.BackgroundColor3 = color
+                seg.BackgroundTransparency = if k <= filled then 0.1 else 0.85
+            end
         end
-        table.insert(lines, string.format("TORSO YAW     %+.1f DEG", Telemetry.Value("pilot.torsoYaw", 0)))
-        table.insert(lines, "PILOT         " .. (if Telemetry.Value("pilot.safe", true) then "SAFE / UNTARGETABLE" else "CHECK"))
-        widgets.diagLines.Text = table.concat(lines, "\n")
-        statusTag(display, "LIVE")
     end
 end
 
--- SENSORS (right console): radar with live bearing ring; no contacts exist yet
+local function relBearing(bearing: number): number
+    return (bearing - chassisHeading + 180) % 360 - 180
+end
+
+local function trackerLine(st: any): (string, Color3)
+    local tr = st and st.tr
+    if not tr then
+        return "TRACKER  NOT FITTED", DIM_TEXT
+    end
+    local detail = if tr.dt >= 2 then "COMPONENT" elseif tr.dt == 1 then "STATUS" else "NONE"
+    if not tr.av then
+        return "TRACKER  OFFLINE  /  LOW POWER", RED
+    end
+    return string.format("TRACKER  RNG %d  /  ANALYSIS %s%s", tr.r, detail, if tr.dg then "  /  LIMITED" else ""), if tr.dg then AMBER else CYAN
+end
+
+-- TARGETING (left console): the locked target as the server tracker reports it. On the recon package the component analysis moves to its own display.
+local function buildTargeting(display: Display, compact: boolean)
+    local c = display.content
+    widgets.tgtMode = label(c, "TRACKER  ---", UDim2.fromOffset(18, 6), UDim2.new(1, -30, 0, 24), { TextSize = 17, TextColor3 = DIM_TEXT })
+    widgets.tgtId = label(c, "NO TARGET", UDim2.fromOffset(18, 34), UDim2.new(1, -30, 0, 36), { Font = FONT_TITLE, TextSize = 26, TextColor3 = WHITE })
+    widgets.tgtLines = label(c, "", UDim2.fromOffset(18, 78), UDim2.new(1, -30, 0, 112), { TextSize = 19, TextColor3 = CYAN, TextYAlignment = Enum.TextYAlignment.Top })
+    widgets.tgtSolution = label(c, "", UDim2.fromOffset(18, 196), UDim2.new(1, -30, 0, 24), { TextSize = 19, TextColor3 = CYAN })
+    widgets.tgtWeapon = label(c, "", UDim2.fromOffset(18, 222), UDim2.new(1, -30, 0, 24), { TextSize = 17, TextColor3 = DIM_TEXT })
+    widgets.tgtCompact = compact
+    widgets.tgtRows = if compact then {} else buildBandRows(c, 6, 18, 256, 28, 424, 18)
+    widgets.tgtFoot = label(c, "", UDim2.fromOffset(18, if compact then 262 else 428), UDim2.new(1, -30, 0, if compact then 190 else 48), { TextSize = 16, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
+    display.refresh = function()
+        local st = avState()
+        local lock = st and st.lock
+        local line, color = trackerLine(st)
+        widgets.tgtMode.Text, widgets.tgtMode.TextColor3 = line, color
+        if lock and lock.nm then
+            widgets.tgtId.Text = string.format("%s%s", lock.nm, if lock.ar then "  " .. lock.ar else "")
+            widgets.tgtId.TextColor3 = if lock.st == "TRACK" then WHITE elseif lock.st == "COAST" then AMBER else RED
+            local rel = relBearing(lock.b)
+            local thermalLine = ""
+            if st.th and st.th.on and lock.lv then
+                thermalLine = string.format("\nTHERMAL  %s %.2f", if lock.lv >= 0.7 then "HOT" elseif lock.lv >= 0.4 then "WARM" elseif lock.lv >= 0.15 then "COOL" else "COLD", lock.lv)
+            end
+            widgets.tgtLines.Text = string.format("RANGE    %d ST\nBEARING  %03d   REL %+d\nSPEED    %.1f ST/S   HDG %03d\nSTATUS   %s%s", lock.d, lock.b, rel, lock.sp, lock.hd,
+                if lock.ss == 3 then "DESTROYED" elseif lock.ss == 2 then "DISABLED" else "ACTIVE", thermalLine)
+            widgets.tgtLines.TextColor3 = CYAN
+            widgets.tgtSolution.Text = "SOLUTION  " .. (lock.rs or "TRACK")
+            widgets.tgtSolution.TextColor3 = if lock.st == "TRACK" then CYAN elseif lock.st == "COAST" then AMBER else RED
+            widgets.tgtWeapon.Text = if lock.wr == nil then "WEAPON  ---" elseif lock.wr then "WEAPON  TARGET IN RANGE" else "WEAPON  OUT OF RANGE"
+            widgets.tgtWeapon.TextColor3 = if lock.wr then CYAN else AMBER
+            if compact then
+                widgets.tgtFoot.Text = if lock.cm then "COMPONENT ANALYSIS  >  TARGET ANALYSIS DISPLAY" else "STATUS ONLY  /  COMPONENT ANALYSIS NOT AVAILABLE"
+            else
+                fillBandRows(widgets.tgtRows, lock.cm)
+                widgets.tgtFoot.Text = if lock.cm then "" else "STATUS ONLY  /  COMPONENT ANALYSIS NOT FITTED"
+            end
+        else
+            fillBandRows(widgets.tgtRows, nil)
+            widgets.tgtId.Text, widgets.tgtId.TextColor3 = "NO TARGET", DIM_TEXT
+            local contacts = st and st.c or {}
+            local nearest = contacts[1]
+            widgets.tgtLines.Text = string.format("L  ACQUIRE TARGET IN SIGHT\nCONTACTS  %d%s", #contacts,
+                if nearest then string.format("\nNEAREST  %s  %d ST  BRG %03d", nearest.nm or "UNKNOWN", nearest.d, nearest.b) else "")
+            widgets.tgtLines.TextColor3 = DIM_TEXT
+            widgets.tgtSolution.Text = ""
+            widgets.tgtWeapon.Text = ""
+            widgets.tgtFoot.Text = st and st.ms or ""
+        end
+        statusTag(display, if st then "LIVE" else "STANDBY")
+    end
+end
+
+-- TARGET ANALYSIS (recon aux display): the component condition of the locked target, as bands, plus its thermal signature.
+local function buildAnalysis(display: Display)
+    local c = display.content
+    widgets.anId = label(c, "NO TARGET", UDim2.fromOffset(18, 4), UDim2.new(1, -30, 0, 36), { Font = FONT_TITLE, TextSize = 26, TextColor3 = WHITE })
+    widgets.anRows = buildBandRows(c, 6, 18, 44, 34, 560, 27)
+    widgets.anSig = label(c, "SIGNATURE  ---", UDim2.fromOffset(18, 256), UDim2.new(1, -30, 0, 28), { TextSize = 23, TextColor3 = DIM_TEXT })
+    widgets.anSigBar = bar(c, UDim2.fromOffset(18, 288), UDim2.fromOffset(560, 14), 0, AMBER)
+    widgets.anNote = label(c, "", UDim2.fromOffset(18, 312), UDim2.new(1, -30, 0, 100), { TextSize = 22, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
+    display.refresh = function()
+        local st = avState()
+        local lock = st and st.lock
+        if lock and lock.nm then
+            widgets.anId.Text, widgets.anId.TextColor3 = lock.nm, if lock.st == "TRACK" then WHITE else AMBER
+            fillBandRows(widgets.anRows, lock.cm)
+            local thermalOn = st.th and st.th.on and lock.lv
+            widgets.anSig.Text = if thermalOn then string.format("THERMAL SIGNATURE  %.2f", lock.lv) else "THERMAL SIGNATURE  IMAGER OFF"
+            setBar(widgets.anSigBar, if thermalOn then lock.lv else 0, if thermalOn and lock.lv >= 0.7 then RED elseif thermalOn then AMBER else DIM_TEXT)
+            widgets.anNote.Text = if lock.cm then "" else "COMPONENT ANALYSIS UNAVAILABLE  /  TRACKER LIMITED"
+        else
+            widgets.anId.Text, widgets.anId.TextColor3 = "NO TARGET", DIM_TEXT
+            fillBandRows(widgets.anRows, nil)
+            widgets.anSig.Text = "SIGNATURE  ---"
+            setBar(widgets.anSigBar, 0, DIM_TEXT)
+            widgets.anNote.Text = "ACQUIRE A TARGET (L) TO ANALYSE ITS COMPONENTS"
+        end
+        statusTag(display, if st and st.tr then "LIVE" else "STANDBY")
+    end
+end
+
+-- SENSOR ARRAY (recon aux display): every installed module, its real state, and what the avionics bus is delivering.
+local function buildArray(display: Display)
+    local c = display.content
+    widgets.arrLines = label(c, "", UDim2.fromOffset(18, 6), UDim2.new(1, -30, 0, 190), { TextSize = 25, TextColor3 = CYAN, TextYAlignment = Enum.TextYAlignment.Top })
+    widgets.arrBus = label(c, "AVIONICS BUS", UDim2.fromOffset(18, 204), UDim2.new(1, -30, 0, 28), { TextSize = 22, TextColor3 = WHITE })
+    widgets.arrBusBar = bar(c, UDim2.fromOffset(18, 236), UDim2.fromOffset(560, 14), 0, CYAN)
+    widgets.arrNotes = label(c, "", UDim2.fromOffset(18, 262), UDim2.new(1, -30, 0, 150), { TextSize = 22, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
+    display.refresh = function()
+        local st = avState()
+        local spec = Telemetry.Value("avionics.spec", nil)
+        local lines = {}
+        local function add(name: string, state: string)
+            table.insert(lines, string.format("%-9s %s", name, state))
+        end
+        if spec then
+            add("RADAR", if st and st.rd then string.format("%s %s  %d ST", st.rd.m, st.rd.s, st.rd.r) elseif spec.radar then "STANDBY" else "NOT FITTED")
+            add("OPTICS", if spec.optics then string.format("%.0fX MAX  %s", spec.optics.magnifications[#spec.optics.magnifications], if st and st.zm and st.zm > 1 then string.format("ACTIVE %.0fX", st.mag) else "1X") else "NOT FITTED")
+            add("THERMAL", if not spec.thermal then "NOT FITTED" elseif st and st.th then (if st.th.on then "IMAGING" elseif st.th.av then "READY" else st.th.why) else "STANDBY")
+            add("TRACKER", if not spec.tracker then "NOT FITTED" elseif st and st.tr then (if not st.tr.av then "OFFLINE" elseif st.lock then "LOCKED" else "READY") else "STANDBY")
+            add("BAYS", string.format("%d / %d USED", Telemetry.Value("avionics.baysUsed", 0), Telemetry.Value("avionics.bays", 0)))
+            add("RATED", string.format("%.1f U/S   MASS %.1f T", spec.ratedPower, spec.mass))
+        end
+        widgets.arrLines.Text = table.concat(lines, "\n")
+        local demand, factor = Telemetry.Value("avionics.demand", 0), Telemetry.Value("avionics.factor", 1)
+        widgets.arrBus.Text = string.format("AVIONICS BUS  %.1f U/S  /  %d%% DELIVERED", demand, math.floor(factor * 100 + 0.5))
+        setBar(widgets.arrBusBar, factor, if factor < 0.7 then AMBER else CYAN)
+        local notes = st and st.notes
+        widgets.arrNotes.Text = if notes and #notes > 0 then table.concat(notes, "\n") else "ALL INSTALLED SENSORS NOMINAL"
+        widgets.arrNotes.TextColor3 = if notes and #notes > 0 then AMBER else CYAN
+        statusTag(display, if st then "LIVE" else "STANDBY")
+    end
+end
+
+-- SENSORS (right console): the radar. Contacts come from the server's sensor model (SensorModel), refreshed at the radar's real scan rate; the
+-- display only rotates them against the machine's heading each frame. Up is the mech's heading.
+local SCOPE, CENTER = 340, 170
+local BLIPS = 10
 local function buildSensors(display: Display)
     local c = display.content
-    local size, cx, cy = 340, 230, 190
-    local scope = new("Frame", { Position = UDim2.fromOffset(cx - size / 2, cy - size / 2 + 4), Size = UDim2.fromOffset(size, size), BackgroundColor3 = CYAN_DIM, BackgroundTransparency = 0.9, BorderSizePixel = 0 }, c)
+    local cx, cy = 230, 190
+    local scope = new("Frame", { Position = UDim2.fromOffset(cx - SCOPE / 2, cy - SCOPE / 2 + 4), Size = UDim2.fromOffset(SCOPE, SCOPE), BackgroundColor3 = CYAN_DIM, BackgroundTransparency = 0.9, BorderSizePixel = 0 }, c)
     new("UICorner", { CornerRadius = UDim.new(1, 0) }, scope)
     new("UIStroke", { Color = CYAN, Thickness = 2 }, scope)
+    widgets.rings = {}
     for _, f in ipairs({ 0.66, 0.33 }) do
         local ring = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(f, f), BackgroundTransparency = 1 }, scope)
         new("UICorner", { CornerRadius = UDim.new(1, 0) }, ring)
         new("UIStroke", { Color = CYAN, Thickness = 1, Transparency = 0.6 }, ring)
+        widgets.rings[f] = label(scope, "", UDim2.fromOffset(CENTER + 4, CENTER - f * SCOPE / 2 + 1), UDim2.fromOffset(60, 16), { TextSize = 15, TextColor3 = DIM_TEXT })
     end
     box(scope, UDim2.fromScale(0.5, 0), UDim2.new(0, 1, 1, 0), CYAN, 0.7)
     box(scope, UDim2.fromScale(0, 0.5), UDim2.new(1, 0, 0, 1), CYAN, 0.7)
-    -- Forward marker (always up: radar is mech-relative) and rotating sweep
+    -- the mech: heading is straight up
     box(scope, UDim2.new(0.5, -6, 0, 6), UDim2.fromOffset(12, 4), AMBER, 0.1)
-    local sweepHolder = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, scope)
-    local sweep = box(sweepHolder, UDim2.new(0.5, -1, 0, 4), UDim2.new(0, 3, 0.5, -4), CYAN, 0.1)
-    new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0) }) }, sweep)
-    widgets.sweep = sweepHolder
+    local ship = box(scope, UDim2.fromOffset(CENTER - 4, CENTER - 4), UDim2.fromOffset(8, 8), WHITE, 0.05)
+    ship.Rotation = 45
+    -- a real scan ping: expands once per radar return (the AvionicsClient raises it when a packet carries a fresh scan)
+    widgets.ping = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0, 0), BackgroundTransparency = 1 }, scope)
+    new("UICorner", { CornerRadius = UDim.new(1, 0) }, widgets.ping)
+    widgets.pingStroke = new("UIStroke", { Color = CYAN, Thickness = 2, Transparency = 1 }, widgets.ping)
+    -- camera direction on the rim (where the pilot is looking, relative to the machine)
+    widgets.view = box(scope, UDim2.fromOffset(CENTER, CENTER), UDim2.fromOffset(18, 4), AMBER, 0.2)
+    widgets.view.AnchorPoint = Vector2.new(0.5, 0.5)
     widgets.bearing = {}
     for _, spec in ipairs({ { "N", 0 }, { "E", 90 }, { "S", 180 }, { "W", 270 } }) do
         widgets.bearing[spec[1]] = { angle = spec[2], label = label(c, spec[1], UDim2.fromOffset(0, 0), UDim2.fromOffset(30, 30), { TextSize = 22, TextColor3 = if spec[1] == "N" then AMBER else WHITE, AnchorPoint = Vector2.new(0.5, 0.5), TextXAlignment = Enum.TextXAlignment.Center }) }
     end
     widgets.radarCenter = Vector2.new(cx, cy + 4)
-    widgets.radarRadius = size / 2 + 22
-    widgets.contacts = label(c, "CONTACTS  0     SENSOR SWEEP: DEMO", UDim2.fromOffset(18, 396), UDim2.new(1, -30, 0, 28), { TextSize = 19, TextColor3 = AMBER })
+    widgets.radarRadius = SCOPE / 2 + 22
+    widgets.blips = {}
+    for i = 1, BLIPS do
+        local holder = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(26, 26), BackgroundTransparency = 1, Visible = false, ZIndex = 5 }, scope)
+        local dir = box(holder, UDim2.fromOffset(12, -4), UDim2.fromOffset(2, 12), WHITE, 0.2) -- heading tick (only where the radar resolves heading)
+        dir.Visible = false
+        local shape = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(11, 11), BackgroundColor3 = CYAN, BackgroundTransparency = 0.05, BorderSizePixel = 0, ZIndex = 6 }, holder)
+        local stroke = new("UIStroke", { Color = CYAN, Thickness = 1.5 }, shape)
+        local glyph = label(holder, "", UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(26, 26), { AnchorPoint = Vector2.new(0.5, 0.5), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 20, TextColor3 = RED, ZIndex = 8 })
+        local lockRing = new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(24, 24), BackgroundTransparency = 1, Visible = false, ZIndex = 7 }, holder)
+        new("UIStroke", { Color = WHITE, Thickness = 1.5 }, lockRing)
+        local text = label(scope, "", UDim2.fromOffset(0, 0), UDim2.fromOffset(140, 18), { TextSize = 16, TextColor3 = WHITE, ZIndex = 9, Visible = false, Font = Enum.Font.RobotoMono })
+        widgets.blips[i] = { holder = holder, dir = dir, shape = shape, stroke = stroke, glyph = glyph, lock = lockRing, text = text }
+    end
+    widgets.radarInfo = label(c, "RADAR ---", UDim2.fromOffset(18, 370), UDim2.new(1, -30, 0, 24), { TextSize = 19, TextColor3 = CYAN })
+    widgets.radarInfo2 = label(c, "", UDim2.fromOffset(18, 396), UDim2.new(1, -30, 0, 24), { TextSize = 19, TextColor3 = WHITE })
+    widgets.radarInfo3 = label(c, "", UDim2.fromOffset(18, 422), UDim2.new(1, -30, 0, 40), { TextSize = 16, TextColor3 = AMBER, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top })
+    widgets.radarDirty = true
+    widgets.noRadar = label(scope, "NO RADAR FITTED", UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(300, 30), { AnchorPoint = Vector2.new(0.5, 0.5), TextXAlignment = Enum.TextXAlignment.Center, TextSize = 22, TextColor3 = DIM_TEXT, Visible = false, ZIndex = 10 })
     display.refresh = function()
-        widgets.contacts.Text = string.format("CONTACTS  %d   SWEEP: DEMO", #Telemetry.Value("sensors.contacts", {}))
-        statusTag(display, "DEMO")
+        local st = avState()
+        local rd = st and st.rd
+        local spec = Telemetry.Value("avionics.spec", nil)
+        widgets.noRadar.Visible = spec ~= nil and spec.radar == nil
+        if rd then
+            widgets.radarInfo.Text = string.format("%s %s  RNG %d ST  %.1f SCANS/S", rd.m, rd.s, rd.r, 1 / math.max(rd.i, 0.05))
+            widgets.radarInfo.TextColor3 = if rd.s == "ONLINE" then CYAN else AMBER
+        else
+            widgets.radarInfo.Text = if spec and spec.radar then "RADAR STANDBY" else "RADAR NOT FITTED"
+            widgets.radarInfo.TextColor3 = DIM_TEXT
+        end
+        local contacts = st and st.c or {}
+        local scale = RADAR_SCALES[radarScaleIndex]
+        local reach = if rd then rd.r * scale else 0
+        widgets.radarInfo2.Text = string.format("CONTACTS %d   SCALE %d ST   [O]", #contacts, reach)
+        widgets.radarInfo3.Text = (if st and st.notes and #st.notes > 0 then table.concat(st.notes, "  /  ") else "") .. (if st and st.ms then "\n" .. st.ms else "")
+        for f, ring in pairs(widgets.rings) do
+            ring.Text = if reach > 0 then string.format("%d", reach * f) else ""
+        end
+        widgets.radarDirty = true
+        statusTag(display, if st then "LIVE" else "STANDBY")
     end
 end
 
--- OVERHEAD: system list, final status line
+-- Positions the blips against the current chassis heading. Called every frame while the display is on; it writes properties only when the heading
+-- moved by more than 0.15 degrees or a new packet arrived.
+local lastHeadingDrawn = 1e9
+local function placeBlips()
+    if not widgets.blips then
+        return
+    end
+    if not widgets.radarDirty and math.abs(((chassisHeading - lastHeadingDrawn) + 180) % 360 - 180) < 0.15 then
+        return
+    end
+    lastHeadingDrawn = chassisHeading
+    widgets.radarDirty = false
+    local st = avState()
+    local rd = st and st.rd
+    local contacts = st and st.c or {}
+    local reach = (if rd then rd.r else 1) * RADAR_SCALES[radarScaleIndex]
+    local lockName = st and st.lock and st.lock.nm
+    for i, blip in ipairs(widgets.blips) do
+        local contact = contacts[i]
+        if not contact or not rd then
+            blip.holder.Visible, blip.text.Visible = false, false
+        else
+            local rel = math.rad(relBearing(contact.b))
+            local r = contact.d / math.max(reach, 1)
+            local outside = r > 1
+            r = math.min(r, 1.02)
+            local x, y = CENTER + math.sin(rel) * r * CENTER, CENTER - math.cos(rel) * r * CENTER
+            blip.holder.Position = UDim2.fromOffset(x, y)
+            blip.holder.Visible = true
+            local identified = contact.nm ~= nil
+            local color = if contact.ss == 3 then RED elseif contact.ss == 2 then AMBER else CYAN
+            local fade = if contact.sl then 0.65 elseif outside then 0.55 else 0
+            blip.shape.BackgroundColor3 = color
+            blip.stroke.Color = color
+            blip.shape.BackgroundTransparency = if identified and contact.ss == 1 then 0.05 + fade * 0.9 else 1
+            blip.stroke.Transparency = fade
+            blip.shape.Rotation = if contact.kd == 2 then 45 else 0
+            blip.shape.Size = if contact.kd == 2 then UDim2.fromOffset(10, 10) else UDim2.fromOffset(11, 11)
+            blip.glyph.Text = if contact.ss == 3 then "X" elseif contact.ss == 2 then "x" else ""
+            blip.glyph.TextColor3 = color
+            blip.glyph.TextTransparency = fade
+            if contact.hd and contact.mv then
+                blip.dir.Visible = true
+                blip.holder.Rotation = relBearing(contact.hd)
+                blip.dir.BackgroundColor3 = color
+            else
+                blip.dir.Visible = false
+                blip.holder.Rotation = 0
+            end
+            blip.lock.Visible = lockName ~= nil and contact.nm == lockName
+            blip.text.Visible = true
+            blip.text.Position = UDim2.fromOffset(x + 11, y - 8)
+            blip.text.Text = string.format("%s %d%s", contact.nm or "UNK", contact.d, if contact.sl then " ?" else "")
+            blip.text.TextColor3 = color
+            blip.text.TextTransparency = fade
+        end
+    end
+end
+
+-- OVERHEAD: system list. Every line is read from live state: nothing here is a static label.
 local function buildOverhead(display: Display)
     local c = display.content
     local systems = {
-        { "REACTOR", "reactor" }, { "COOLING", "cooling" }, { "HYDRAULICS", "hydraulics" }, { "LIFE SUPPORT", "life" },
-        { "EJECTION", "ejection" }, { "LOCOMOTION", "drive" }, { "TARGETING", "standby" }, { "FIRE CONTROL", "standby" },
+        { "REACTOR", "reactor" }, { "COOLING", "cooling" }, { "HYDRAULICS", "hydraulics" }, { "EJECTION", "ejection" },
+        { "LOCOMOTION", "drive" }, { "SENSORS", "sensors" }, { "TARGETING", "targeting" }, { "FIRE CONTROL", "fire" },
     }
     widgets.overheadItems = {}
     for i, sys in ipairs(systems) do
@@ -445,22 +724,62 @@ local function buildOverhead(display: Display)
         local y = 14 + row * 38
         local dot = box(c, UDim2.fromOffset(x, y + 8), UDim2.fromOffset(12, 12), CYAN, 0.1)
         label(c, sys[1], UDim2.fromOffset(x + 22, y), UDim2.fromOffset(128, 28), { TextSize = 18, TextColor3 = WHITE })
-        local state = label(c, "---", UDim2.fromOffset(x + 142, y), UDim2.fromOffset(90, 28), { TextSize = 18, TextColor3 = CYAN })
+        local state = label(c, "---", UDim2.fromOffset(x + 142, y), UDim2.fromOffset(90, 28), { TextSize = 16, TextColor3 = CYAN })
         widgets.overheadItems[i] = { dot = dot, state = state, kind = sys[2] }
     end
     widgets.overheadStatus = label(c, "IF-42 BASTION", UDim2.fromOffset(20, 96), UDim2.new(1, -40, 0, 30), { Font = FONT_TITLE, TextSize = 20, TextColor3 = CYAN })
+    widgets.overheadBuild = label(c, "", UDim2.fromOffset(20, 140), UDim2.new(1, -40, 0, 30), { TextSize = 17, TextColor3 = DIM_TEXT })
     display.refresh = function()
         local m = Telemetry.Value("loadout.metrics", nil)
+        local st = avState()
+        local thermal = Telemetry.Value("energy.thermal", 0)
         for _, item in ipairs(widgets.overheadItems) do
-            local on = item.kind ~= "standby" and m ~= nil
-            item.state.Text = if on then "ONLINE" else "STANDBY"
-            if item.kind == "drive" then item.state.Text = Telemetry.Value("movement.drive", "IDLE") end
-            if item.kind == "reactor" then item.state.Text = Telemetry.Value("reactor.state", "STANDBY") end
-            item.state.TextColor3 = if on then CYAN else DIM_TEXT
-            item.dot.BackgroundColor3 = if on then CYAN else AMBER
-            item.dot.BackgroundTransparency = if on then 0.1 else 0.55
+            local text, level = "STANDBY", 3 -- level: 0 ok, 1 caution, 2 fault, 3 not available
+            if m then
+                if item.kind == "reactor" then
+                    local factor = Telemetry.Value("damage.reactor", 1)
+                    text, level = Telemetry.Value("reactor.state", "STANDBY"), 0
+                    if factor < 0.999 then
+                        text, level = string.format("%d%%", math.floor(factor * 100 + 0.5)), if factor <= 0.5 then 2 else 1
+                    end
+                elseif item.kind == "cooling" then
+                    text, level = if thermal >= 90 then "OVERHEAT" elseif thermal >= 70 then "HOT" else "NOMINAL", if thermal >= 90 then 2 elseif thermal >= 70 then 1 else 0
+                elseif item.kind == "hydraulics" then
+                    local speed = Telemetry.Value("damage.speed", 1)
+                    text, level = if speed < 0.999 then string.format("%d%%", math.floor(speed * 100 + 0.5)) else "NOMINAL", if speed <= 0.5 then 2 elseif speed < 0.999 then 1 else 0
+                elseif item.kind == "ejection" then
+                    local state = Telemetry.Value("mech.state", "OPERATIONAL")
+                    text, level = if state == "OPERATIONAL" then "ARMED" else "ACTIVE", 0
+                elseif item.kind == "drive" then
+                    text, level = Telemetry.Value("movement.drive", "IDLE"), 0
+                elseif item.kind == "sensors" then
+                    local rd = st and st.rd
+                    text = if rd then rd.s else (if Telemetry.Value("avionics.hasRadar", false) then "STANDBY" else "NOT FITTED")
+                    level = if rd and rd.s == "ONLINE" then 0 elseif rd then 1 else 3
+                elseif item.kind == "targeting" then
+                    local tr = st and st.tr
+                    if not tr then
+                        text, level = "NOT FITTED", 3
+                    elseif not tr.av then
+                        text, level = "OFFLINE", 2
+                    elseif st.lock and st.lock.nm then
+                        text, level = string.sub("LOCK " .. st.lock.nm, 1, 11), if st.lock.st == "TRACK" then 0 else 1
+                    else
+                        text, level = "READY", 0
+                    end
+                elseif item.kind == "fire" then
+                    local w = Telemetry.Value("weapons.state", "SAFE")
+                    text, level = w, if w == "ENERGY LOW" or w == "RESERVED" then 1 else 0
+                end
+            end
+            item.state.Text = text
+            local color = if level == 0 then CYAN elseif level == 1 then AMBER elseif level == 2 then RED else DIM_TEXT
+            item.state.TextColor3 = color
+            item.dot.BackgroundColor3 = color
+            item.dot.BackgroundTransparency = if level == 3 then 0.6 else 0.1
         end
-        widgets.overheadStatus.Text = string.format("SHIELD %s / %.1fs / %s",Telemetry.Value("shield.state","READY"),Telemetry.Value("shield.cooldown",0),Telemetry.Value("shield.timing","AWAITING IMPACT"))
+        widgets.overheadStatus.Text = string.format("SHIELD %s / %.1fs / %s", Telemetry.Value("shield.state", "READY"), Telemetry.Value("shield.cooldown", 0), Telemetry.Value("shield.timing", "AWAITING IMPACT"))
+        widgets.overheadBuild.Text = Telemetry.Value("avionics.label", "")
         statusTag(display, "LIVE")
     end
 end
@@ -471,6 +790,9 @@ end
 
 local overlay: ScreenGui, scaler: UIScale
 local fade: Frame
+local guis: { Instance } = {}
+local subscription: (() -> ())? = nil
+local viewportConn: RBXScriptConnection? = nil
 local compass = { strip = nil :: Frame?, ticks = {} :: { { frame: Frame, label: TextLabel?, angle: number } } }
 local heading = 0
 local PX_PER_DEG = 4.2
@@ -478,6 +800,7 @@ local PX_PER_DEG = 4.2
 local function buildOverlay(playerGui: PlayerGui)
     overlay = new("ScreenGui", { Name = "IronframeCockpitHud", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 20, Enabled = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, playerGui)
     scaler = new("UIScale", {}, overlay)
+    table.insert(guis, overlay)
 
     -- Soft dark backplate so the compass and status text stay readable over any background
     local plate = new("Frame", { Name = "TopPlate", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 0), Size = UDim2.fromOffset(640, 150), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.35, BorderSizePixel = 0 }, overlay)
@@ -514,6 +837,8 @@ local function buildOverlay(playerGui: PlayerGui)
         box(reticle, UDim2.new(0.5, s * 34 - (if s < 0 then 18 else 0), 0.5, -1), UDim2.fromOffset(18, 2), CYAN, 0.4)
         box(reticle, UDim2.new(0.5, s * 78 - 1, 0.5, -6), UDim2.fromOffset(2, 12), CYAN, 0.55)
     end
+    widgets.zoomText = label(overlay, "", UDim2.new(0.5, 100, 0.5, -10), UDim2.fromOffset(160, 22), { TextSize = 17, TextColor3 = AMBER, TextXAlignment = Enum.TextXAlignment.Left })
+    widgets.avLine = label(overlay, "", UDim2.new(0.5, 0, 0.5, 100), UDim2.fromOffset(700, 22), { TextSize = 15, TextColor3 = CYAN, AnchorPoint = Vector2.new(0.5, 0), TextXAlignment = Enum.TextXAlignment.Center })
     widgets.stab = label(overlay, "STAB  IDLE  /  WEAPONS SAFE", UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(300, 20), { TextSize = 15, TextColor3 = DIM_TEXT, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.5, -122), TextXAlignment = Enum.TextXAlignment.Center })
 
     -- Boot / status banner
@@ -522,6 +847,7 @@ local function buildOverlay(playerGui: PlayerGui)
 
     -- Evacuation warning
     local alertGui = new("ScreenGui", { Name = "IronframeCockpitAlert", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 110, ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, playerGui)
+    table.insert(guis, alertGui)
     new("UIScale", {}, alertGui)
     widgets.alertScale = alertGui:FindFirstChildOfClass("UIScale")
     local warn = new("Frame", { Name = "EvacWarning", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false, ZIndex = 30 }, alertGui)
@@ -533,10 +859,11 @@ local function buildOverlay(playerGui: PlayerGui)
     widgets.evacFrame = warn
 
     -- Hint strip
-    widgets.hint = label(overlay, "V  Garage view     R  Recenter     Mouse / Arrows  Look     LMB Fire  1-6 Hardpoint  T Reload     C  Power profile     X  Test ejection     ALT  Free cursor", UDim2.new(0.5, 0, 1, -34), UDim2.fromOffset(1100, 22), { TextSize = 15, TextColor3 = DIM_TEXT, AnchorPoint = Vector2.new(0.5, 0), TextXAlignment = Enum.TextXAlignment.Center })
+    widgets.hint = label(overlay, "V  Garage view     R  Recenter     Mouse / Arrows  Look     LMB Fire  1-6 Hardpoint  T Reload     C  Power profile     X  Test ejection     ALT  Free cursor\nZ  Zoom     Y  Thermal     L  Lock / next target     U  Release     O  Radar scale", UDim2.new(0.5, 0, 1, -58), UDim2.fromOffset(1300, 44), { TextSize = 15, TextColor3 = DIM_TEXT, AnchorPoint = Vector2.new(0.5, 0), TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Top })
 
     -- Fade layer (separate gui so it covers everything, including the garage UI)
     local fadeGui = new("ScreenGui", { Name = "IronframeCockpitFade", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 100 }, playerGui)
+    table.insert(guis, fadeGui)
     fade = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0, Active = false }, fadeGui)
     widgets.fadeText = label(fade, "", UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(500, 30), { Font = FONT_TITLE, TextSize = 18, TextColor3 = CYAN, AnchorPoint = Vector2.new(0.5, 0.5), TextXAlignment = Enum.TextXAlignment.Center, TextTransparency = 1 })
 end
@@ -553,11 +880,13 @@ local built = false
 local refreshAccumulator = 0
 local dirty = true
 
-function Hud.Build(cockpit, playerGui: PlayerGui)
+-- paletteName: "INDUSTRIAL" | "RECON" (the compiled cockpit package's palette). The recon fittings add two auxiliary displays.
+function Hud.Build(cockpit, playerGui: PlayerGui, paletteName: string?)
     if built then
         return
     end
     built = true
+    applyPalette(paletteName or "INDUSTRIAL")
     buildOverlay(playerGui)
     local part = function(key: string): Part
         return cockpit.screens[key].part
@@ -565,10 +894,15 @@ function Hud.Build(cockpit, playerGui: PlayerGui)
     buildStructure(makeDisplay("MFD_L", part("MFD_L"), Vector2.new(640, 490), "STRUCTURE"))
     buildReactor(makeDisplay("MFD_C", part("MFD_C"), Vector2.new(480, 490), "REACTOR"))
     buildArmament(makeDisplay("MFD_R", part("MFD_R"), Vector2.new(640, 490), "ARMAMENT"))
-    buildDiagnostics(makeDisplay("ConsoleL", part("ConsoleL"), Vector2.new(460, 482), "DIAGNOSTICS"))
-    buildSensors(makeDisplay("ConsoleR", part("ConsoleR"), Vector2.new(460, 482), "SENSORS"))
+    local recon = cockpit.screens.AuxL ~= nil
+    buildTargeting(makeDisplay("ConsoleL", part("ConsoleL"), Vector2.new(460, 482), "TARGETING"), recon)
+    buildSensors(makeDisplay("ConsoleR", part("ConsoleR"), Vector2.new(460, 482), "RADAR"))
     buildOverhead(makeDisplay("Overhead", part("Overhead"), Vector2.new(1000, 250), "SYSTEMS"))
-    Telemetry.Subscribe(function()
+    if recon then
+        buildAnalysis(makeDisplay("AuxL", part("AuxL"), Vector2.new(600, 424), "TARGET ANALYSIS"))
+        buildArray(makeDisplay("AuxR", part("AuxR"), Vector2.new(600, 424), "SENSOR ARRAY"))
+    end
+    subscription = Telemetry.Subscribe(function()
         dirty = true
     end)
     local function rescale()
@@ -581,7 +915,81 @@ function Hud.Build(cockpit, playerGui: PlayerGui)
     end
     rescale()
     if workspace.CurrentCamera then
-        workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale)
+        viewportConn = workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale)
+    end
+end
+
+-- Tears down every ScreenGui this module made and forgets all display state, so Build can run again with another palette. (The SurfaceGuis die with
+-- the old cockpit model, which the caller destroys.)
+function Hud.Destroy()
+    for _, g in ipairs(guis) do
+        g:Destroy()
+    end
+    table.clear(guis)
+    table.clear(displays)
+    table.clear(sections)
+    table.clear(widgets)
+    table.clear(compass.ticks)
+    if subscription then
+        subscription()
+        subscription = nil
+    end
+    if viewportConn then
+        viewportConn:Disconnect()
+        viewportConn = nil
+    end
+    built = false
+    dirty = true
+    lastHeadingDrawn = 1e9
+end
+
+function Hud.Rebuild(cockpit, playerGui: PlayerGui, paletteName: string?)
+    local wasVisible = overlay ~= nil and overlay.Parent ~= nil and overlay.Enabled
+    Hud.Destroy()
+    Hud.Build(cockpit, playerGui, paletteName)
+    overlay.Enabled = wasVisible
+end
+
+function Hud.Palette(): string
+    return paletteId
+end
+
+function Hud.Colors(): { primary: Color3, warn: Color3, crit: Color3, text: Color3, dim: Color3 }
+    return { primary = CYAN, warn = AMBER, crit = RED, text = WHITE, dim = DIM_TEXT }
+end
+
+-- Radar controls / readouts used by the avionics client and the camera mode.
+function Hud.SetChassisHeading(value: number)
+    chassisHeading = value % 360
+end
+
+function Hud.CycleRadarScale(): number
+    radarScaleIndex = radarScaleIndex % #RADAR_SCALES + 1
+    if widgets.radarDirty ~= nil then
+        widgets.radarDirty = true
+    end
+    dirty = true
+    return RADAR_SCALES[radarScaleIndex]
+end
+
+function Hud.RadarScale(): number
+    return RADAR_SCALES[radarScaleIndex]
+end
+
+function Hud.RadarPing()
+    widgets.pingAt = os.clock()
+end
+
+-- Compact text next to the reticle (zoom) and under it (modes): set only when the string changes.
+function Hud.SetReadouts(zoom: string, modes: string, modesColor: Color3?)
+    if widgets.zoomText and widgets.zoomText.Text ~= zoom then
+        widgets.zoomText.Text = zoom
+    end
+    if widgets.avLine then
+        if widgets.avLine.Text ~= modes then
+            widgets.avLine.Text = modes
+        end
+        widgets.avLine.TextColor3 = modesColor or CYAN
     end
 end
 
@@ -693,7 +1101,7 @@ function Hud.SetHeading(value: number)
     heading = value % 360
 end
 
--- Per-frame cheap animation: compass tape, radar bearing ring and sweep.
+-- Per-frame cheap animation: compass tape, radar bearing ring and contact placement (real contacts only).
 function Hud.Step(dt: number, t: number)
     animateProfile(os.clock())
     if widgets.stab then
@@ -726,13 +1134,25 @@ function Hud.Step(dt: number, t: number)
     widgets.headingValue.Text = string.format("HDG %03d", math.floor(heading + 0.5) % 360)
     local sensors = displays.ConsoleR
     if sensors and sensors.state == "ON" then
-        widgets.sweep.Rotation = (t * 70) % 360
+        -- Radar: up is the machine's own heading (not the camera). Cardinal letters and every contact rotate against it.
         for _, item in pairs(widgets.bearing) do
-            local angle = math.rad(item.angle - heading)
+            local angle = math.rad(item.angle - chassisHeading)
             item.label.Position = UDim2.fromOffset(
                 widgets.radarCenter.X + math.sin(angle) * widgets.radarRadius,
                 widgets.radarCenter.Y - math.cos(angle) * widgets.radarRadius
             )
+        end
+        local view = math.rad(relBearing(heading))
+        widgets.view.Position = UDim2.fromOffset(CENTER + math.sin(view) * (CENTER - 3), CENTER - math.cos(view) * (CENTER - 3))
+        widgets.view.Rotation = math.deg(view)
+        placeBlips()
+        local pingAge = os.clock() - (widgets.pingAt or -10)
+        if pingAge < 0.7 then
+            local p = pingAge / 0.7
+            widgets.ping.Size = UDim2.fromScale(p, p)
+            widgets.pingStroke.Transparency = 0.35 + 0.65 * p
+        elseif widgets.pingStroke.Transparency < 1 then
+            widgets.pingStroke.Transparency = 1
         end
     end
     refreshAccumulator += dt

@@ -8,6 +8,10 @@ local ChassisRegistry = {
         baseIntegrity = 1000,
         -- Integrated default generator/capacitor mass is included in dryMass; upgrade mass is additional.
         defaultSystems = { capacitor = "CAP_STANDARD", shield = "SHIELD_PULSE", actuators = "ACT_STANDARD" },
+        -- M11C cockpit contract: the physical frame (CockpitLayouts), the equipment packages this frame can take, and what a factory machine wears.
+        -- A future chassis names its own layout and a compatible catalog; the sensor services never look at the frame.
+        cockpit = { layout = "BASTION_FRAME", packages = { "CKP_STANDARD", "CKP_RECON" }, defaultPackage = "CKP_STANDARD",
+            defaultAvionics = { radar = "AV_RADAR_BASIC" }, eyeHeight = 13.6 },
         referenceIntegrity = 1200, -- baseIntegrity + ARMOR_STANDARD: the structure the CombatConfig region health is tuned for
         energy = {
             idle = 8, drive = 20, speed = 14, acceleration = 2.4, turn = 10, braking = 0.35,

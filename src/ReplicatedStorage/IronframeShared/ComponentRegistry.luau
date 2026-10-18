@@ -8,6 +8,13 @@
 --               movementEnergyScale (x every movement energy demand)
 --   armor       integrityBonus (structure; the per-region health scale is derived from it), speedScale / accelScale / turnScale,
 --               movementEnergyScale
+--
+-- M11C: two new classes. `cockpit` is an equipment PACKAGE (physical instrument arrangement, lighting palette, how many avionics bays the
+-- interior has, sensor bonuses); `avionics` is one functional MODULE that goes into a bay. Both are compiled by LoadoutCompiler into
+-- `compiled.cockpit` / `compiled.avionics` and everything downstream (sensor service, energy ledger, camera, displays) reads only that.
+--   avionics   slot (radar | optics | thermal | targeting), mass (t), powerDraw (rated u/s), `sensor` (the module's capability numbers)
+--   cockpit    layouts (physical frames it fits), bays (avionics modules besides the radar), mass, powerDraw, palette, equipment,
+--              sensorBonus (multipliers the package applies to the modules installed in it)
 local ComponentRegistry = {
     CAP_STANDARD = { name = "Integrated C-160", class = "capacitor", mass = 0, capacity = 160, initialCharge = 160,
         chargeEfficiency = 0.9, maxChargeRate = 50, maxDischargeRate = 100, burstLimit = 60 },
@@ -37,6 +44,39 @@ local ComponentRegistry = {
     -- Structure +25 % on every region (derived from integrityBonus), for +1.5 t, a slower and thirstier drive.
     ARMOR_REINFORCED = { name = "Reinforced Armor", class = "armor", mass = 4.5, integrityBonus = 500, speedScale = 0.93, accelScale = 0.9, turnScale = 0.94,
         movementEnergyScale = 1.12, selectable = true, summary = "+25% structure. Heavier, slower, thirstier." },
+
+    -- M11C avionics ---------------------------------------------------------------------------------------------------------------
+    -- Radar. The integrated set is part of the chassis (mass 0) and rides on the idle bus (powerDraw 0): it can never be starved away.
+    -- Range / ident range in studs, interval = seconds between scans, stale / lost = seconds since the last return until the contact is
+    -- shown as stale and dropped, obstruction = fraction of range lost per intervening solid structure (two or more count as two),
+    -- steps = what the display can resolve (a coarse set reports distance in 5 st and bearing in 3 deg steps).
+    AV_RADAR_BASIC = { name = "RS-4 Tactical Radar", class = "avionics", slot = "radar", mass = 0, powerDraw = 0, selectable = true,
+        summary = "Integrated set. 240 st, 1.7 scans/s, coarse resolution. Identifies out to 150 st.",
+        sensor = { range = 240, interval = 0.6, identRange = 150, stale = 1.5, lost = 6, obstruction = 0.6, distStep = 5, bearingStep = 3,
+            heading = false, wreckHold = 15 } },
+    AV_RADAR_ENHANCED = { name = "RS-9 Wide-Area Radar", class = "avionics", slot = "radar", mass = 0.9, powerDraw = 5, selectable = true,
+        summary = "400 st, 4 scans/s, fine resolution, heading and full identification. Falls back to RS-4 performance when starved.",
+        sensor = { range = 400, interval = 0.25, identRange = 400, stale = 1.0, lost = 10, obstruction = 0.35, distStep = 1, bearingStep = 1,
+            heading = true, wreckHold = 25, fallback = "AV_RADAR_BASIC", needsPower = 0.7 } },
+    AV_OPTICS_ZOOM = { name = "OP-2 Stabilized Optics", class = "avionics", slot = "optics", mass = 0.5, powerDraw = 1.5, selectable = true,
+        summary = "1x / 2x / 4x magnification with gyro stabilization. Draws power while magnified.",
+        sensor = { magnifications = { 1, 2, 4 }, standby = 0.4 } },
+    AV_THERMAL = { name = "TI-3 Thermal Imager", class = "avionics", slot = "thermal", mass = 0.9, powerDraw = 8, selectable = true,
+        summary = "Cooled thermal view. Shows hot machinery in line of sight out to 260 st. Needs real power, offline when starved.",
+        sensor = { range = 260, standby = 0.8, needsPower = 0.5 } },
+    AV_TRACKER = { name = "TC-1 Target Tracker", class = "avionics", slot = "targeting", mass = 0.6, powerDraw = 4, selectable = true,
+        summary = "Locks a target you can see within 300 st and keeps its status on the display. Information only, no fire control.",
+        sensor = { range = 300, loseTime = 3, detail = 1, standby = 1, needsPower = 0.5, cone = 7, cycleCone = 24 } },
+
+    -- M11C cockpit equipment packages -------------------------------------------------------------------------------------------
+    CKP_STANDARD = { name = "Industrial Combat Cockpit", class = "cockpit", mass = 0, powerDraw = 0, bays = 2, selectable = true,
+        layouts = { "BASTION_FRAME" }, palette = "INDUSTRIAL", equipment = {},
+        summary = "Established Bastion interior. Amber and green instruments. Two avionics bays.",
+        sensorBonus = {} },
+    CKP_RECON = { name = "Recon Retrofit", class = "cockpit", mass = 1.1, powerDraw = 2, bays = 3, selectable = true,
+        layouts = { "BASTION_FRAME" }, palette = "RECON", equipment = { "RECON_AUX_MONITORS", "RECON_SENSOR_BANK", "RECON_HOOD" },
+        summary = "Sensor consoles, blue-white tactical lighting, three avionics bays. +1.1 t, +2 u/s. Radar +15% range, +25% scan rate.",
+        sensorBonus = { radarRange = 1.15, radarRate = 1.25, thermalRange = 1.2, trackerDetail = 2 } },
 
     W_LASER_RIFLE = {
         name = "LR-12 Laser Rifle", class = "weapon", family = "energy", size = 2, selectable = true,

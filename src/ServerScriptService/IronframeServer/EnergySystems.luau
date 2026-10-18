@@ -14,6 +14,7 @@ function Systems.Create(model, config, profileId)
     return { model = model, config = config, energy = Energy.New(config), shield = Shield.New(config.shield),
         profile = Profiles.New(profileId), clock = 0, weaponRate = 0, sprintLimitedUntil = -1, weaponLimitedUntil = -1,
         publishAt = -1, published = {}, propulsion = 0, sprintFraction = 0, weaponUntil = 0,
+        avionicsDemand = 0, avionicsFactor = 1,
         pending = nil, lastTest = -100, testReport = "H: scheduled impact / J: category / K: weapon load SIM" }
 end
 function Systems.Publish(p, force)
@@ -38,6 +39,7 @@ function Systems.Publish(p, force)
         EnergySprintDemand = rounded(e.delivered.sprint or 0), EnergySprintReserve = rounded(Energy.Reserve(e, "sprint")),
         EnergyWeaponReserve = rounded(Energy.Reserve(e, "weapons")),
         ReactorScale = rounded(p.reactorScale or 1),
+        AvionicsDemand = rounded(p.avionicsDemand or 0), AvionicsDelivered = rounded(e.delivered.avionics or 0), AvionicsFactor = math.floor((p.avionicsFactor or 1) * 100 + 0.5) / 100,
         EnergyTestReport = p.testReport, EnergyTestPending = p.pending ~= nil,
         EnergyTestETA = p.pending and rounded(math.max(0, p.pending.at - s.time)) or 0,
     }
@@ -154,6 +156,9 @@ function Systems.Step(p, dt, drive, throttle, steer, sprint, enabled)
         if Shield.Protects(s) then Energy.Request(e, "shield", cfg.shield.activeDrain) end
         if s.time < p.weaponUntil then Energy.Request(e, "weapons", cfg.weaponTestRate) end
         Energy.Request(e, "sprint", boost)
+        -- M11C avionics: the sensor service sets the demand from the compiled equipment and its current modes. It is the lowest priority,
+        -- gated by a capacitor floor, so starvation shows up here first (see Energy.Floor) and never touches propulsion.
+        if (p.avionicsDemand or 0) > 0 then Energy.Request(e, "avionics", p.avionicsDemand) end
     else p.pending, p.weaponUntil = nil, 0 end
     Energy.Advance(e, dt, enabled)
     if s.state == "READY" and enabled then
@@ -167,6 +172,13 @@ function Systems.Step(p, dt, drive, throttle, steer, sprint, enabled)
         local attack = p.pending.attack
         p.pending = nil
         Systems.ResolveImpact(p, attack, drive and drive.yaw or 0)
+    end
+    local want = p.avionicsDemand or 0
+    if want > 0 and enabled then
+        local got = math.clamp((e.delivered.avionics or 0) / want, 0, 1)
+        p.avionicsFactor += (got - p.avionicsFactor) * (1 - math.exp(-dt / 0.4)) -- smoothed: one starved substep must not flicker the sensors
+    else
+        p.avionicsFactor = 1
     end
     local base, fraction = Energy.Performance(e, propulsion, boost)
     p.propulsion, p.sprintFraction = propulsion + boost, fraction

@@ -21,6 +21,7 @@ local RangeControl = require(script.Parent.RangeControl)
 local TankCombat = require(script.Parent.TankCombat) -- M10B
 local SortieReport = require(script.Parent.SortieReport) -- M11A
 local BastionDamage = require(script.Parent.BastionDamage) -- M10B
+local AvionicsService = require(script.Parent.AvionicsService) -- M11C
 local sessions = {}
 local selfTestResult = { passed = 0, total = 0, failed = {} }
 local bayCounter = 0
@@ -46,6 +47,9 @@ local RequestEnergyTest = remote("RemoteEvent", "RequestEnergyTest")
 local RequestEnergyProfile = remote("RemoteEvent", "RequestEnergyProfile") -- (profileId) validated against EnergyProfiles
 local RequestLoadout = remote("RemoteEvent", "RequestLoadout") -- M11A: { mounts = {socket = id|false}, systems = {slot = id} }, validated by LoadoutCompiler.ApplyRequest
 local RequestLoadoutRevert = remote("RemoteEvent", "RequestLoadoutRevert") -- M11A: swap back to the configuration before the last install
+
+local RequestAvionics = remote("RemoteEvent", "RequestAvionics") -- M11C: (command, a, b) validated by AvionicsService.Command: "zoom" | "thermal" | "acquire" | "release"
+local AvionicsUpdate = remote("RemoteEvent", "AvionicsUpdate") -- M11C: server -> owner, one bounded packet (contacts, lock, thermal list, modes) at most 10 per second
 
 local WeaponIntent = remote("RemoteEvent", "WeaponIntent")
 local WeaponEffects = remote("RemoteEvent", "WeaponEffects")
@@ -127,7 +131,7 @@ local function setDeploymentAttributes(session)
     end
 end
 
-local function assemble(player)
+local function assemble(player, message)
     local session = sessions[player]
     if not session then return end
     resetDeployment(session)
@@ -156,12 +160,15 @@ local function assemble(player)
     Weapons.Create(session)
     session.damageCapacity = compiled.structure
     BastionDamage.Create(session) -- fresh, fully repaired components (at the build's own structure) for every assembly
+    AvionicsService.Attach(session) -- M11C: the sensor runtime of this build (fresh tracker, no lock, 1x, thermal off); the equipment is session.loadout's
     EnergySystems.Publish(session.power, true)
     setDeploymentAttributes(session)
-    StateChanged:FireClient(player, publicState(player, "Loadout installed"))
+    StateChanged:FireClient(player, publicState(player, message or "Loadout installed"))
     print(string.format("[IF-STEP-03] Assembled %s for userId %d", session.presetId, player.UserId))
 end
 
+AvionicsService.Init({ remote = AvionicsUpdate, sessions = sessions })
+RequestAvionics.OnServerEvent:Connect(AvionicsService.Command)
 RangeControl.Init(DestructionFx, RequestRangeReset, sessions)
 TankCombat.Init({ sessions = sessions, fx = CombatFx, weaponFx = WeaponEffects })
 WorldBuilder.Initialize()
@@ -186,8 +193,18 @@ SetPreset.OnServerEvent:Connect(function(player, presetId)
         return
     end
     session.presetId = presetId
-    session.loadout, session.customized, session.previousLoadout = Compiler.Clone(Loadouts.presets[presetId]), false, nil -- a factory preset restores every slot
-    assemble(player)
+    -- A factory preset restores every weapon / reactor / drive / armour slot. M11C: it does not touch the cockpit package or the avionics (a preset
+    -- is a weapon loadout). If the retained equipment would not fit the preset's mass or power budget the factory cockpit equipment is restored instead.
+    local fresh = Compiler.Clone(Loadouts.presets[presetId])
+    local keptCockpit, keptAvionics = session.loadout and session.loadout.cockpit, session.loadout and session.loadout.avionics
+    fresh.cockpit, fresh.avionics = keptCockpit, if keptAvionics then table.clone(keptAvionics) else nil
+    local message = "Loadout installed"
+    if (keptCockpit ~= nil or keptAvionics ~= nil) and not Compiler.Compile(fresh).valid then
+        fresh.cockpit, fresh.avionics = nil, nil
+        message = "COCKPIT EQUIPMENT RESET: DOES NOT FIT THIS PRESET"
+    end
+    session.loadout, session.customized, session.previousLoadout = fresh, not Compiler.Same(fresh, Loadouts.presets[presetId]), nil
+    assemble(player, message)
 end)
 
 -- M11A: engineering. The client sends component ids only; LoadoutCompiler.ApplyRequest validates every field against the registry catalog
@@ -479,6 +496,7 @@ RunService.Heartbeat:Connect(function(dt)
     end
     -- Weapon bursts spend only after all propulsion/shield substeps have settled. No second budget.
     for _, session in pairs(sessions) do Weapons.Step(session,WeaponEffects) end
+    AvionicsService.Step(os.clock()) -- M11C: radar scan, lock, thermal visibility, avionics energy demand, one packet to the owner
     CombatTargets.Step(os.clock())
     Destructibles.Step(os.clock(), dt)
     TankCombat.Step(os.clock(), dt)

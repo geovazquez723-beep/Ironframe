@@ -17,6 +17,7 @@ local EnergySystems = require(script.Parent.EnergySystems) -- M10B (test shield 
 local HitDebug = require(script.Parent.HitDebug) -- M11B (Studio-only diagnostic overlay)
 local MechHit = require(script.Parent.MechHit) -- M11B
 local Weapons = require(script.Parent.Weapons) -- M11B (audit shots use the production strike path)
+local AvionicsService = require(script.Parent.AvionicsService) -- M11C (audit snapshot and test commands)
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local RangeControl = {}
@@ -286,6 +287,28 @@ installAuditInterface = function(sessions: { [Player]: any })
             local resolved = Destructibles.lastHit
             return { name = last and last.name, damage = total, hits = hits, position = pos, normal = last and last.normal, part = last and last.instance,
                 comp = if last and last.damage > 0 and resolved then resolved.comp else nil }
+        -- M11C avionics audit / test commands (server only; the real client path is the RequestAvionics remote)
+        elseif command == "av" then
+            local session = d.owner and sessions[d.owner]
+            return session and AvionicsService.Audit(session)
+        elseif command == "avcmd" then -- cmd, a, b: the same validated entry point the remote uses
+            if d.owner then
+                local session = sessions[d.owner]
+                if session and session.av then
+                    session.av.lastCommand = -10
+                end
+                AvionicsService.Command(d.owner, a, b, c)
+                return true
+            end
+            return false
+        elseif command == "avcharge" then -- set the Bastion's capacitor charge (starvation tests)
+            local session = d.owner and sessions[d.owner]
+            if session and session.power then
+                session.power.energy.charge = a
+                session.power.energy.tokens = math.min(session.power.energy.tokens, a)
+                return true
+            end
+            return false
         elseif command == "rookwreck" then -- region, damage: penetrating damage straight to a region (component / terminal tests)
             local rook = d.rook
             return rook ~= nil and BastionDamage.Hit(rook.unit, a, b) ~= nil

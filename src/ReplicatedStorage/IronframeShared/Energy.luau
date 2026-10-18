@@ -4,7 +4,10 @@ local Energy = {}
 local function finite(v) return type(v) == "number" and v == v and math.abs(v) < math.huge end
 local function positive(v) return finite(v) and v >= 0 end
 Energy.IsAmount = positive
-Energy.Priority = { idle = 1, propulsion = 2, shield = 3, weapons = 4, sprint = 5 }
+Energy.Priority = { idle = 1, propulsion = 2, shield = 3, weapons = 4, sprint = 5, avionics = 6 }
+-- M11C: default capacitor floor (fraction of capacity) for keys the active profile does not name. Optional avionics ride on reactor surplus and the
+-- top of the capacitor only: they never eat the charge the shield needs to raise, and they are the first load to starve, never propulsion.
+Energy.Floor = { avionics = 0.25 }
 -- Mandatory baseline operation. An allocation policy (M09 energy profile) can reorder and reserve against everything
 -- else, but never these: the mech always keeps its idle load and basic propulsion served first, with no capacitor reserve.
 Energy.Mandatory = { idle = true, propulsion = true }
@@ -32,8 +35,9 @@ local function priorityOf(s, key)
 end
 -- Capacitor charge `key` may not draw below, in energy units.
 function Energy.Reserve(s, key)
-    if Energy.Mandatory[key] or not s.policy or not s.policy.reserve then return 0 end
-    local f = s.policy.reserve[key]
+    if Energy.Mandatory[key] then return 0 end
+    local f = if s.policy and s.policy.reserve then s.policy.reserve[key] else nil
+    if f == nil then f = Energy.Floor[key] end
     return if finite(f) then math.clamp(f, 0, 1) * s.config.capacity else 0
 end
 -- Energy a discrete discretionary payment for `key` could draw right now (burst bucket and reserve both respected).

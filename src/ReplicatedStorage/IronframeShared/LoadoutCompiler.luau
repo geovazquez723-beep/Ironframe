@@ -15,6 +15,8 @@ local ChassisRegistry = if script then require((script :: any).Parent.ChassisReg
 local ComponentRegistry = if script then require((script :: any).Parent.ComponentRegistry) else require("./ComponentRegistry" :: any)
 local EnergyConfig = if script then require((script :: any).Parent.EnergyConfig) else require("./EnergyConfig" :: any)
 local CombatConfig = if script then require((script :: any).Parent.CombatConfig) else require("./CombatConfig" :: any)
+local Avionics = if script then require((script :: any).Parent.Avionics) else require("./Avionics" :: any)
+local CockpitLayouts = if script then require((script :: any).Parent.CockpitLayouts) else require("./CockpitLayouts" :: any)
 
 local Compiler = {}
 
@@ -69,6 +71,44 @@ function Compiler.SystemOptions(slot: string): { string }
         return {}
     end
     return sortedIds(function(_, c) return c.class == class end)
+end
+
+-- M11C: cockpit packages the chassis' frame accepts, and the avionics modules a slot may hold. Both derive from `selectable` registry entries.
+Compiler.AvionicsSlots = Avionics.Slots
+
+function Compiler.CockpitOptions(chassisId: string): { string }
+    local chassis = ChassisRegistry[chassisId]
+    local spec = chassis and chassis.cockpit
+    if not spec then
+        return {}
+    end
+    return sortedIds(function(id, c)
+        return c.class == "cockpit" and table.find(spec.packages, id) ~= nil and table.find(c.layouts, spec.layout) ~= nil
+    end)
+end
+
+function Compiler.AvionicsOptions(chassisId: string, slot: string): { string }
+    local chassis = ChassisRegistry[chassisId]
+    if not chassis or not chassis.cockpit or not table.find(Avionics.Slots, slot) then
+        return {}
+    end
+    return sortedIds(function(_, c)
+        return c.class == "avionics" and c.slot == slot
+    end)
+end
+
+-- The cockpit package and avionics a loadout actually wears: its own explicit choices, else the chassis' factory equipment.
+function Compiler.CockpitOf(loadout: any): (string?, { [string]: string }?)
+    local chassis = ChassisRegistry[loadout.chassisId]
+    local spec = chassis and chassis.cockpit
+    if not spec then
+        return nil, nil
+    end
+    local avionics = loadout.avionics
+    if avionics == nil then
+        avionics = spec.defaultAvionics
+    end
+    return loadout.cockpit or spec.defaultPackage, avionics
 end
 
 -- Effective-value helpers -----------------------------------------------------------------------------------------------------------
@@ -182,6 +222,46 @@ function Compiler.Compile(loadout)
         end
     end
 
+    -- M11C: cockpit package and avionics modules. Mass and rated power enter the same budgets as every other component; bays are a hard limit.
+    local cockpitPackage, avionicsModules, packageId
+    if chassis.cockpit then
+        local cockpitId, installed = Compiler.CockpitOf(loadout)
+        local package = ComponentRegistry[cockpitId or ""]
+        if not CockpitLayouts.Frame(chassis.cockpit.layout) then
+            table.insert(issues, "Unknown cockpit layout")
+        elseif not package or package.class ~= "cockpit" or not table.find(chassis.cockpit.packages, cockpitId) or not table.find(package.layouts, chassis.cockpit.layout) then
+            table.insert(issues, "Invalid cockpit package")
+        elseif type(installed) ~= "table" then
+            table.insert(issues, "Invalid avionics map")
+        else
+            cockpitPackage, packageId, avionicsModules = package, cockpitId, {}
+            local bays = 0
+            for slot, id in pairs(installed) do
+                local component = ComponentRegistry[id]
+                if type(slot) ~= "string" or not table.find(Avionics.Slots, slot) then
+                    table.insert(issues, "Unknown avionics slot: " .. tostring(slot))
+                elseif type(id) ~= "string" or not component or component.class ~= "avionics" or component.slot ~= slot then
+                    table.insert(issues, "Invalid avionics module for slot: " .. slot)
+                else
+                    local entry = table.clone(component)
+                    entry.id = id
+                    avionicsModules[slot] = entry
+                    metrics.mass += component.mass
+                    metrics.powerDraw += component.powerDraw
+                    if slot ~= "radar" then
+                        bays += 1
+                    end
+                end
+            end
+            metrics.mass += package.mass
+            metrics.powerDraw += package.powerDraw
+            metrics.avionicsBays, metrics.avionicsBaysMax = bays, package.bays
+            if bays > package.bays then
+                table.insert(issues, "Avionics bays exceeded")
+            end
+        end
+    end
+
     metrics.remainingMass = metrics.massLimit - metrics.mass
     if metrics.remainingMass < -0.0001 then
         table.insert(issues, "Mass limit exceeded")
@@ -223,6 +303,11 @@ function Compiler.Compile(loadout)
         local scale = modifiers.structure * (if region == "LEG_L" or region == "LEG_R" then modifiers.legStructure else 1)
         structure[region] = math.floor(hp * scale + 0.5)
     end
+    if cockpitPackage then
+        result.cockpit = { id = packageId, name = cockpitPackage.name, layout = chassis.cockpit.layout, bays = cockpitPackage.bays, baysUsed = metrics.avionicsBays,
+            palette = cockpitPackage.palette, equipment = table.clone(cockpitPackage.equipment), eyeHeight = chassis.cockpit.eyeHeight }
+        result.avionics = Avionics.Effective(packageId :: string, cockpitPackage, avionicsModules :: any)
+    end
     result.modifiers = modifiers
     result.locomotion = locomotion
     result.structure = structure
@@ -238,7 +323,16 @@ end
 -- A flat table of the numbers the garage compares and the sortie report records.
 function Compiler.Stats(compiled)
     local m, l, e, s = compiled.metrics, compiled.locomotion, compiled.energy, compiled.structure
+    local av = compiled.avionics
+    local radar, optics, thermal, tracker = av and av.radar, av and av.optics, av and av.thermal, av and av.tracker
+    local top = 1
+    if optics then
+        top = optics.magnifications[#optics.magnifications]
+    end
     return {
+        radarRange = radar and radar.range or 0, radarRate = if radar then 1 / radar.interval else 0, identRange = radar and radar.identRange or 0, zoomMax = top,
+        thermalRange = thermal and thermal.range or 0, trackRange = tracker and tracker.range or 0, trackDetail = tracker and tracker.detail or 0,
+        avionicsMass = av and av.mass or 0, avionicsPower = av and av.ratedPower or 0, baysUsed = m.avionicsBays or 0, baysMax = m.avionicsBaysMax or 0,
         output = e.output, capacity = e.capacity, thermalPerEnergy = e.thermalPerEnergy, cooling = e.cooling, chargeRate = e.maxChargeRate,
         topSpeed = l.maxForward, sprintSpeed = l.maxForward * e.movement.sprintMultiplier, accel = l.accelForward, turnRate = math.deg(l.turnRate),
         moveEnergy = compiled.modifiers.movementEnergy, coreStructure = s.CORE, legStructure = s.LEG_L, armStructure = s.ARM_L, reactorStructure = s.REACTOR,
@@ -251,6 +345,7 @@ local SHORT = {
     CORE_220 = "CORE 220", CORE_260 = "CORE 260", CORE_300 = "CORE 300", ACT_STANDARD = "STD DRIVE", ACT_MOBILITY = "SPRINT M-2",
     ARMOR_STANDARD = "COMPOSITE", ARMOR_REINFORCED = "REINFORCED",
 }
+local COCKPIT_SHORT = { CKP_STANDARD = "STANDARD", CKP_RECON = "RECON" }
 function Compiler.Label(loadout): string
     local systems, mounts = loadout.systems or {}, loadout.mounts or {}
     local names = {}
@@ -264,7 +359,28 @@ function Compiler.Label(loadout): string
         end
     end
     local drive = systems.actuators or "ACT_STANDARD"
-    return string.format("%s / %s / %s | %s", SHORT[systems.reactor or ""] or "CORE ?", SHORT[drive] or "DRIVE ?", SHORT[systems.armor or ""] or "ARMOR ?", if #names > 0 then table.concat(names, " + ") else "UNARMED")
+    local label = string.format("%s / %s / %s | %s", SHORT[systems.reactor or ""] or "CORE ?", SHORT[drive] or "DRIVE ?", SHORT[systems.armor or ""] or "ARMOR ?", if #names > 0 then table.concat(names, " + ") else "UNARMED")
+    -- M11C: the cockpit and avionics are named only when they are not the factory equipment, so factory labels are unchanged.
+    local chassis = ChassisRegistry[loadout.chassisId]
+    local spec = chassis and chassis.cockpit
+    if spec then
+        local package, installed = Compiler.CockpitOf(loadout)
+        local factory = Compiler.Normalize({ chassisId = loadout.chassisId, systems = {}, mounts = {} })
+        local function moduleNames(map: any): string
+            local list = {}
+            for _, slot in ipairs(Avionics.Slots) do
+                if type(map) == "table" and map[slot] then
+                    table.insert(list, Avionics.Short[map[slot]] or "?")
+                end
+            end
+            return table.concat(list, " ")
+        end
+        if package ~= factory.cockpit or moduleNames(installed) ~= moduleNames(factory.avionics) then
+            local modules = moduleNames(installed)
+            label ..= string.format(" | %s %s", COCKPIT_SHORT[package or ""] or "COCKPIT ?", if modules ~= "" then modules else "NO AVIONICS")
+        end
+    end
+    return label
 end
 
 -- Request validation ----------------------------------------------------------------------------------------------------------------
@@ -276,11 +392,42 @@ function Compiler.ApplyRequest(base, request: any): (any?, string?)
         return nil, "INVALID REQUEST"
     end
     local chassisId = base.chassisId
-    local out = { chassisId = chassisId, systems = table.clone(base.systems or {}), mounts = table.clone(base.mounts or {}) }
+    local out = Compiler.Clone(base)
     local changes = 0
     for key in pairs(request) do
-        if key ~= "mounts" and key ~= "systems" then
+        if key ~= "mounts" and key ~= "systems" and key ~= "cockpit" and key ~= "avionics" then
             return nil, "UNKNOWN REQUEST FIELD"
+        end
+    end
+    -- M11C: the cockpit package (one id) and avionics modules ({ [slot] = id | false }), both from the registry catalog for this chassis.
+    if request.cockpit ~= nil then
+        local id = request.cockpit
+        if type(id) ~= "string" or #id > 40 or not table.find(Compiler.CockpitOptions(chassisId), id) then
+            return nil, "COCKPIT PACKAGE NOT AVAILABLE"
+        end
+        local normalized = Compiler.Normalize(base)
+        out.cockpit, out.avionics = id, normalized.avionics
+        changes += 1
+    end
+    if request.avionics ~= nil then
+        local modules = request.avionics
+        if type(modules) ~= "table" then
+            return nil, "INVALID AVIONICS"
+        end
+        local normalized = Compiler.Normalize(out)
+        out.cockpit, out.avionics = normalized.cockpit, normalized.avionics
+        for slot, id in pairs(modules) do
+            if type(slot) ~= "string" or not table.find(Avionics.Slots, slot) then
+                return nil, "AVIONICS SLOT NOT AVAILABLE"
+            end
+            if id == false then
+                out.avionics[slot] = nil
+            elseif type(id) == "string" and #id <= 40 and table.find(Compiler.AvionicsOptions(chassisId, slot), id) then
+                out.avionics[slot] = id
+            else
+                return nil, "MODULE NOT AVAILABLE FOR " .. string.upper(slot)
+            end
+            changes += 1
         end
     end
     local mounts = request.mounts
@@ -328,12 +475,26 @@ function Compiler.ApplyRequest(base, request: any): (any?, string?)
     return out, nil
 end
 
--- Deep copy of a loadout (presets are shared data; a session must never edit them in place).
-function Compiler.Clone(loadout)
-    return { chassisId = loadout.chassisId, systems = table.clone(loadout.systems or {}), mounts = table.clone(loadout.mounts or {}) }
+-- The loadout with its factory cockpit equipment spelled out (cockpit id and a fresh avionics map). Chassis without a cockpit contract pass through.
+function Compiler.Normalize(loadout)
+    local out = { chassisId = loadout.chassisId, systems = table.clone(loadout.systems or {}), mounts = table.clone(loadout.mounts or {}) }
+    local package, installed = Compiler.CockpitOf(loadout)
+    if package then
+        out.cockpit = package
+        out.avionics = if type(installed) == "table" then table.clone(installed) else {}
+    end
+    return out
 end
 
--- True when two loadouts are identical in every slot.
+-- Deep copy of a loadout (presets are shared data; a session must never edit them in place).
+function Compiler.Clone(loadout)
+    local out = { chassisId = loadout.chassisId, systems = table.clone(loadout.systems or {}), mounts = table.clone(loadout.mounts or {}) }
+    out.cockpit = loadout.cockpit
+    out.avionics = if loadout.avionics then table.clone(loadout.avionics) else nil
+    return out
+end
+
+-- True when two loadouts are identical in every slot (a missing cockpit / avionics map means the chassis' factory equipment).
 function Compiler.Same(a, b): boolean
     for _, slot in ipairs({ "systems", "mounts" }) do
         local x, y = a[slot] or {}, b[slot] or {}
@@ -343,6 +504,14 @@ function Compiler.Same(a, b): boolean
         for k, v in pairs(y) do
             if x[k] ~= v then return false end
         end
+    end
+    local na, nb = Compiler.Normalize(a), Compiler.Normalize(b)
+    if na.cockpit ~= nb.cockpit then return false end
+    for k, v in pairs(na.avionics or {}) do
+        if (nb.avionics or {})[k] ~= v then return false end
+    end
+    for k, v in pairs(nb.avionics or {}) do
+        if (na.avionics or {})[k] ~= v then return false end
     end
     return a.chassisId == b.chassisId
 end

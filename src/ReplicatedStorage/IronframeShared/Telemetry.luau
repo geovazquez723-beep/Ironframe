@@ -74,6 +74,10 @@ Telemetry.Keys = {
     "shield.state", "shield.cooldown", "shield.integrity", "shield.reason", "shield.timing",
     -- M10B: active tank combat and Bastion component damage (published by CombatHud from authoritative server attributes)
     "damage.regions", "damage.speed", "damage.reactor", "damage.disabled", "combat.threat", "combat.targets", "combat.lastHit",
+    -- M11C: cockpit equipment and avionics. "avionics.state" is the latest server sensor packet (contacts, lock, thermal, capability);
+    -- spec / label / bays come from the compiled build; demand / factor from the energy ledger's published attributes.
+    "loadout.cockpit", "avionics.state", "avionics.spec", "avionics.label", "avionics.hasRadar", "avionics.baysUsed", "avionics.bays",
+    "avionics.demand", "avionics.factor",
 }
 
 return Telemetry

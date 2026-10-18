@@ -22,6 +22,8 @@ local container: Folder? = nil
 local voices: { [string]: { player: AudioPlayer, fader: AudioFader, filter: AudioFilter?, target: number, current: number, baseSpeed: number } } = {}
 local report: { [string]: string } = {}
 local cockpitMix, spool = 0, 0 -- 0..1 targets
+-- M11C package atmosphere: the industrial cockpit has a deeper, louder reactor hum; the recon retrofit a lighter hum and a clearer, louder air handler.
+local profile = { hum = 1, humSpeed = 1, air = 1 }
 local started = false
 
 local function wire(source: Instance, target: Instance)
@@ -89,11 +91,11 @@ function Audio.Start()
         -- Slow smoothing of every voice level; hum pitch follows the reactor spool.
         local hum, air, hangar = voices.hum, voices.air, voices.hangar
         if hum then
-            hum.target = (0.04 + 0.5 * cockpitMix) * spool
-            hum.player.PlaybackSpeed = hum.baseSpeed * (0.8 + 0.5 * spool) * (1 + 0.012 * math.sin(t * 0.7))
+            hum.target = (0.04 + 0.5 * cockpitMix) * spool * profile.hum
+            hum.player.PlaybackSpeed = hum.baseSpeed * profile.humSpeed * (0.8 + 0.5 * spool) * (1 + 0.012 * math.sin(t * 0.7))
         end
         if air then
-            air.target = 0.05 * cockpitMix * spool
+            air.target = 0.05 * cockpitMix * spool * profile.air
         end
         if hangar then
             hangar.target = 0.1 * (1 - 0.6 * cockpitMix)
@@ -104,6 +106,15 @@ function Audio.Start()
             v.fader.Volume = v.current
         end
     end)
+end
+
+-- "INDUSTRIAL" | "RECON" (the cockpit package's palette id).
+function Audio.SetPackage(palette: string)
+    if palette == "RECON" then
+        profile = { hum = 0.7, humSpeed = 1.25, air = 2.2 }
+    else
+        profile = { hum = 1, humSpeed = 1, air = 1 }
+    end
 end
 
 -- 0 = standing in the hangar view, 1 = sealed inside the cockpit.
