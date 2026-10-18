@@ -27,6 +27,7 @@ local limits = Config.limits
 local districts = {} -- [bay Model] = district
 local partIndex = {} -- [BasePart] = { district, obj, comp }
 local fxRemote: RemoteEvent? = nil
+local hitObservers: { (any, any, string?, string, Vector3, Vector3, number, BasePart) -> () } = {} -- diagnostics only (HitDebug)
 local rng = Random.new(10101)
 local nextId = 0
 
@@ -37,6 +38,11 @@ Destructibles.Config = Config
 
 function Destructibles.SetRemote(remote: RemoteEvent)
     fxRemote = remote
+end
+
+-- Registers a read-only observer of every registered hit (whether or not it dealt damage). Used by the Studio diagnostic overlay.
+function Destructibles.AddHitObserver(fn)
+    table.insert(hitObservers, fn)
 end
 
 -- District ---------------------------------------------------------------------------------------------------------------
@@ -135,10 +141,23 @@ local function newId(prefix: string): string
     return string.format("%s%03d", prefix, nextId)
 end
 
-function Destructibles.IndexPart(d, obj, comp: string?, part: BasePart)
-    partIndex[part] = { district = d, obj = obj, comp = comp }
+-- `resolve` (optional, M11B): (part, worldPosition) -> component. Used when one physical surface carries several logical components (the tank
+-- engine is the rear deck of the hull mesh), so the registered impact point, not the part that was struck, picks the component.
+function Destructibles.IndexPart(d, obj, comp: string?, part: BasePart, resolve: ((BasePart, Vector3) -> string)?)
+    partIndex[part] = { district = d, obj = obj, comp = comp, resolve = resolve }
     obj.parts = obj.parts or {}
     table.insert(obj.parts, part)
+end
+
+-- Every registered hit body of a district's machines (not modules), with the component it carries. Diagnostics only.
+function Destructibles.Registered(d)
+    local list = {}
+    for part, rec in pairs(partIndex) do
+        if rec.district == d and rec.obj.kind ~= "module" then
+            table.insert(list, { part = part, comp = rec.comp, obj = rec.obj })
+        end
+    end
+    return list
 end
 
 function Destructibles.UnindexObject(obj)
@@ -514,42 +533,53 @@ end
 
 -- Entry point from CombatTargets.Hit. context = { weapon = componentId, position, normal }. Returns effective damage dealt
 -- (0 when the part is not a destructible, is protected, or the weapon has no structural class).
-function Destructibles.Hit(part: BasePart, category: string, damage: number, _now: number, context: any): number
-    local rec = partIndex[part]
-    if not rec then
-        return 0
-    end
-    local d, obj = rec.district, rec.obj
-    if d.destroyed or d.resetting or part:GetAttribute("Targetable") == false then
-        return 0
-    end
+-- Applies one validated weapon hit to (object, component). Shared by the part path (Destructibles.Hit) and the analytic-volume path
+-- (Destructibles.HitVolume), so a ray that strikes a tank mesh and a ray that strikes a mech's fitted volume take the same route: class,
+-- resolve, damage, marks, statistics, batched cosmetic event. `part` is nil for analytic hits.
+local function deliver(d, obj, comp: string?, part: BasePart?, category: string, damage: number, context: any): number
     local class = Config.WeaponClass(context and context.weapon, category, damage)
     if not class or damage ~= damage or damage <= 0 then
         return 0
     end
-    local position = context and context.position or part.Position
+    local position = context and context.position or (part and part.Position) or Vector3.zero
     local normal = context and context.normal or ORIGIN_UP
     local dealt
     if obj.kind == "module" then
         dealt = damageModule(d, obj, class, damage, nil, position, normal)
     elseif obj.kind == "robot" then
-        dealt = obj.takeHit(d, obj, rec.comp, class, damage, position, normal, context, category)
+        dealt = obj.takeHit(d, obj, comp, class, damage, position, normal, context, category)
     else
-        dealt = damageComponent(d, obj, rec.comp, class, damage, position, normal)
+        dealt = damageComponent(d, obj, comp :: string, class, damage, position, normal)
+    end
+    Destructibles.lastHit = { comp = comp, class = class, dealt = dealt, position = position, object = obj.id } -- audit: what the most recent hit resolved to
+    for _, observer in ipairs(hitObservers) do
+        observer(d, obj, comp, class, position, normal, dealt, part)
+    end
+    local origin = context and context.origin
+    local incoming = if origin and (position - origin).Magnitude > 0.5 then (position - origin).Unit else nil -- direction of travel (cosmetic reflection)
+    local function event(amount: number)
+        -- c: logical component struck (vehicle / robot), so the client can pick a material-appropriate response (track, turret, engine, ...).
+        local fx = if obj.kind == "module" then obj.def.fx elseif obj.kind == "robot" then obj.hitFx(comp) else Config.materials[obj.comps[comp].unit.material].fx
+        local shot = if obj.kind == "robot" then obj.lastShot else nil -- shield timing and interception point of this hit (ROOK-01)
+        emit(d, { t = "h", f = fx, w = class, p = position, n = normal, m = math.floor(amount * 10) / 10, c = if obj.kind == "module" then nil else comp, o = obj.id, i = incoming,
+            sh = shot and shot.timing, sp = shot and shot.sp })
     end
     if dealt <= 0 then
+        -- A round that lands on armour that took no damage (a wrecked component, a shield-absorbed hit) still strikes it: sparks, no numbers.
+        if obj.kind ~= "module" then
+            event(0)
+        end
         return 0
     end
     if obj.onHit then
-        obj.onHit(d, obj, rec.comp, position, normal, class)
+        obj.onHit(d, obj, comp, position, normal, class, context)
     end
     local stats = d.stats
     stats.damage += dealt
     stats.hits += 1
     stats.byClass[class] += dealt
     d.dirty = true
-    local fx = if obj.kind == "module" then obj.def.fx elseif obj.kind == "robot" then obj.hitFx(rec.comp) else Config.materials[obj.comps[rec.comp].unit.material].fx
-    emit(d, { t = "h", f = fx, w = class, p = position, n = normal, m = math.floor(dealt * 10) / 10 })
+    event(dealt)
     local splash = Config.splash[class]
     if splash then
         local total = blast(d, position, splash.radius, damage, splash.fraction, splash.maxTargets, if obj.kind == "module" then obj else nil)
@@ -559,6 +589,61 @@ function Destructibles.Hit(part: BasePart, category: string, damage: number, _no
         end
     end
     return dealt
+end
+
+-- Entry point from CombatTargets.Hit. context = { weapon = componentId, position, normal, origin }. Returns effective damage dealt
+-- (0 when the part is not a destructible, is protected, or the weapon has no structural class).
+function Destructibles.Hit(part: BasePart, category: string, damage: number, _now: number, context: any): number
+    local rec = partIndex[part]
+    if not rec then
+        return 0
+    end
+    local d, obj = rec.district, rec.obj
+    if d.destroyed or d.resetting or part:GetAttribute("Targetable") == false then
+        return 0
+    end
+    local comp = rec.comp
+    if rec.resolve then
+        local position = context and context.position or part.Position
+        comp = rec.resolve(part, position) or comp
+    end
+    return deliver(d, obj, comp, part, category, damage, context)
+end
+
+-- Analytic bodies (M11B): a machine whose hit geometry is a set of fitted volumes instead of parts (ROOK-01). It registers a probe
+-- function `(origin, direction, maxDistance) -> { t, comp, normal } | nil`; weapons ask for the nearest probe hit along their ray and compare it with the
+-- world raycast, so cover in front of the machine still blocks the shot and a nearer volume wins over a farther surface.
+-- A mech region failed (arm weapon assembly, leg, reactor): one cosmetic burst at the failure point, by region. State lives in MechDamage.
+function Destructibles.MechFailure(d, region: string, point: Vector3)
+    emit(d, { t = "x", f = "machine", k = "mechfail", cf = CFrame.new(point), s = Vector3.new(3, 3, 3), c = Color3.fromRGB(60, 60, 62), mat = Enum.Material.Metal, e = 1.4, comp = region }, true)
+end
+
+function Destructibles.SetProbe(obj, probe)
+    obj.probe = probe
+end
+
+function Destructibles.Probe(origin: Vector3, direction: Vector3, maxDistance: number)
+    local best
+    for _, d in pairs(districts) do
+        if not d.destroyed and not d.resetting and d.rook and d.rook.probe then
+            local hit = d.rook.probe(origin, direction, best and best.t or maxDistance)
+            if hit and (not best or hit.t < best.t) then
+                best = hit
+                best.district, best.object = d, d.rook
+            end
+        end
+    end
+    return best
+end
+
+function Destructibles.HitVolume(hit, category: string, damage: number, context: any): number
+    local d, obj = hit.district, hit.object
+    if d.destroyed or d.resetting then
+        return 0
+    end
+    context = context or {}
+    context.position, context.normal = hit.position, hit.normal
+    return deliver(d, obj, hit.comp, nil, category, damage, context)
 end
 
 -- Per-frame --------------------------------------------------------------------------------------------------------------

@@ -14,6 +14,9 @@ local EnemyMech = require(script.Parent.EnemyMech) -- M10C
 local BastionDamage = require(script.Parent.BastionDamage) -- M10B
 local Locomotion = require(script.Parent.Locomotion) -- M10B (test teleport / input only)
 local EnergySystems = require(script.Parent.EnergySystems) -- M10B (test shield only)
+local HitDebug = require(script.Parent.HitDebug) -- M11B (Studio-only diagnostic overlay)
+local MechHit = require(script.Parent.MechHit) -- M11B
+local Weapons = require(script.Parent.Weapons) -- M11B (audit shots use the production strike path)
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local RangeControl = {}
@@ -214,31 +217,22 @@ installAuditInterface = function(sessions: { [Player]: any })
         -- M10C audit / test commands for ROOK-01. They use the same Destructibles.Hit / shield / brain paths as live play.
         elseif command == "rook" then
             return EnemyMech.Audit(d)
-        elseif command == "rookpart" then -- region -> the hit volume a weapon ray would strike (CORE | ARM_L | ARM_R | LEG_L | LEG_R | REACTOR)
-            if d.rook then
-                for _, v in ipairs(d.rook.volumes) do
-                    if v.region == a then
-                        return v.part
-                    end
-                end
-            end
-            return nil
-        elseif command == "rookhit" then -- region, weaponId, shots, origin Vector3?: shots resolved exactly like the player's weapon hits
+        elseif command == "rookpart" then -- region -> world point of its largest fitted volume (CORE | ARM_L | ARM_R | LEG_L | LEG_R | REACTOR)
+            return d.rook and EnemyMech.RegionPoint(d.rook, a)
+        elseif command == "rookhit" then -- region, weaponId, shots, origin Vector3?: shots resolved exactly like the player's weapon hits (analytic volume path)
             local rook = d.rook
             if not rook then
                 return nil
             end
-            local part
-            for _, v in ipairs(rook.volumes) do
-                if v.region == a then
-                    part = v.part
-                    break
-                end
+            local point = EnemyMech.RegionPoint(rook, a)
+            if not point then
+                return nil
             end
             local spec = Components[b].combat
             local total = 0
             for _ = 1, c or 1 do
-                total += CombatTargets.Hit(part, spec.category, spec.damage, os.clock(), { weapon = b, position = part.Position, normal = Vector3.new(0, 0, -1), origin = rook.hitOrigin })
+                local hit = { district = d, object = rook, comp = a, position = point, normal = Vector3.new(0, 0, -1) }
+                total += Destructibles.HitVolume(hit, spec.category, spec.damage, { weapon = b, origin = rook.hitOrigin })
             end
             return total
         elseif command == "rookorigin" then -- Vector3 | nil: where "test" shooters stand (for the directional shield)
@@ -262,6 +256,36 @@ installAuditInterface = function(sessions: { [Player]: any })
                 return true
             end
             return false
+        -- M11B audit / test commands ---------------------------------------------------------------------------------------------
+        elseif command == "hitdebug" then -- true | false: the Studio-only hit-geometry overlay (server-created, off by default)
+            return HitDebug.Set(a == true, d, Destructibles, function(folder)
+                -- Fitted compound volumes (ROOK-01, the deployed Bastion) are plain tables: draw them as parts that follow the machine's chassis frame.
+                local function draw(controller, volumes)
+                    HitDebug.Track(function() return Locomotion.ChassisCFrame(controller) end, MechHit.Boxes(volumes))
+                end
+                if d.rook and d.rook.volumes then
+                    draw(d.rook.controller, d.rook.volumes)
+                end
+                local session = d.owner and sessions[d.owner]
+                if session and session.controller and session.mech then
+                    draw(session.controller, MechHit.Build(session.mech))
+                end
+            end)
+        elseif command == "shoot" then -- { origin, target, weapon, shots? }: the production hitscan strike (Weapons.Strike); returns what the ray registered
+            local spec = Components[a.weapon].combat
+            local dir = (a.target - a.origin).Unit
+            local last, total, hits = nil, 0, 0
+            for _ = 1, a.shots or 1 do
+                last = Weapons.Strike(nil, a.origin, dir, spec, a.weapon, os.clock())
+                total += last.damage
+                if last.damage > 0 then
+                    hits += 1
+                end
+            end
+            local pos = last and last.endpoint
+            local resolved = Destructibles.lastHit
+            return { name = last and last.name, damage = total, hits = hits, position = pos, normal = last and last.normal, part = last and last.instance,
+                comp = if last and last.damage > 0 and resolved then resolved.comp else nil }
         elseif command == "rookwreck" then -- region, damage: penetrating damage straight to a region (component / terminal tests)
             local rook = d.rook
             return rook ~= nil and BastionDamage.Hit(rook.unit, a, b) ~= nil

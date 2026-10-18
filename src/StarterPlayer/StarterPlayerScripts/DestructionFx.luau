@@ -12,6 +12,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.IronframeShared.DestructionConfig)
+local Profile = require(ReplicatedStorage.IronframeShared.ImpactProfile)
 
 local Fx = {}
 
@@ -71,6 +72,12 @@ function Fx.Start(remotes, hud)
         slot.flash = newEmitter(att, "Flash", TEX_SPARK, { Lifetime = NumberRange.new(0.08, 0.14), Speed = NumberRange.new(0, 0), SpreadAngle = Vector2.new(0, 0), LightEmission = 1, Size = seq(3, 8), Transparency = seq(0.05, 1) })
         slot.fire = newEmitter(att, "Fire", TEX_FIRE, { Lifetime = NumberRange.new(0.45, 0.95), Speed = NumberRange.new(5, 20), SpreadAngle = Vector2.new(60, 60), LightEmission = 0.9, Color = ColorSequence.new(Color3.fromRGB(255, 200, 100), Color3.fromRGB(230, 70, 20)), Size = seq(4, 0.4), Transparency = seq(0.05, 1), Acceleration = V3(0, 8, 0) })
         slot.shock = newEmitter(att, "Shock", TEX_SHOCK, { Lifetime = NumberRange.new(0.26, 0.34), Speed = NumberRange.new(0, 0), SpreadAngle = Vector2.new(0, 0), LightEmission = 0.5, Size = seq(2, 16), Transparency = seq(0.35, 1), Orientation = Enum.ParticleOrientation.FacingCamera })
+        slot.baseLife = {}
+        for key, value in pairs(slot) do
+            if typeof(value) == "Instance" and value:IsA("ParticleEmitter") then
+                slot.baseLife[key] = value.Lifetime
+            end
+        end
         slots[i] = slot
     end
     local function takeSlot(pos: Vector3, normal: Vector3)
@@ -296,10 +303,9 @@ function Fx.Start(remotes, hud)
                 e.Size = seq(size * 0.2, size)
             end
         end
-        if lifetimeScale then
-            local l = e.Lifetime
-            e.Lifetime = NumberRange.new(l.Min * lifetimeScale, l.Max * lifetimeScale)
-        end
+        -- Lifetimes are always derived from the emitter's own base value: a scale is per burst and never compounds across reuse of a slot.
+        local base = slot.baseLife[which] or e.Lifetime
+        e.Lifetime = if lifetimeScale then NumberRange.new(base.Min * lifetimeScale, base.Max * lifetimeScale) else base
         e:Emit(count)
         stats.bursts += 1
     end
@@ -313,8 +319,90 @@ function Fx.Start(remotes, hud)
         return camera ~= nil and (camera.CFrame.Position - pos).Magnitude <= client.maxDistance
     end
 
+    -- Impact on an armoured machine ("h" with a component: tank hull / turret / tracks / engine, mech regions). The recipe (ImpactProfile) is per
+    -- weapon class and component family; the weapons must look and sound materially different, and a machine-gun round must not look like artillery.
+    local function reflectDir(e): Vector3
+        local n = e.n
+        if e.i then
+            local r = e.i - 2 * e.i:Dot(n) * n
+            if r:Dot(n) > 0.05 then
+                return (r * 0.7 + n * 0.3).Unit -- a glancing round throws its sparks along the reflected path
+            end
+        end
+        return n
+    end
+    local TRACK_DIRT, SPARK_DEFAULT = Color3.fromRGB(128, 114, 92), NumberRange.new(12, 36)
+    local machineHook: ((any) -> ())? = nil -- ROOK-01 / Bastion scorch marks (MechDamageFx), wired by IronframeClient
+    local function machineImpact(e)
+        stats.hits += 1
+        if machineHook then
+            machineHook(e)
+        end
+        local pos, normal = e.p, e.n
+        if not nearCamera(pos) then
+            stats.dropped += 1
+            return
+        end
+        -- Pulse-shield interaction (ROOK-01): drawn where the path crosses the shield plane, in field colours, never as metal. A fully absorbed hit
+        -- stops here; one that bled through continues as an armour impact below.
+        if (e.sh == "PERFECT" or e.sh == "GUARD") then
+            local at = e.sp or pos
+            local shot = takeSlot(at, if e.i then -e.i else normal)
+            local perfect = e.sh == "PERFECT"
+            local color = if perfect then Color3.fromRGB(255, 214, 120) else Color3.fromRGB(70, 200, 255)
+            burst(shot, "shock", 1, color, if perfect then 14 else 11)
+            burst(shot, "flash", 1, color, 3.5)
+            burst(shot, "sparks", 8, color, 0.22)
+            glowLight(shot, color, 2.2, 14, 8)
+            play("zap", at, if perfect then 0.9 else 0.8, if perfect then 1.2 else 0.9)
+            if (e.m or 0) <= 0 then
+                return
+            end
+        end
+        local r = Profile.For(e.w, e.c)
+        local slot = takeSlot(pos, if r.directional then reflectDir(e) else normal)
+        slot.sparks.Speed = NumberRange.new(SPARK_DEFAULT.Min * r.sparkSpeed, SPARK_DEFAULT.Max * r.sparkSpeed)
+        burst(slot, "sparks", r.sparks, rgb(r.sparkColor), r.sparkSize)
+        slot.sparks.Speed = SPARK_DEFAULT
+        if r.flash > 0 then
+            burst(slot, "flash", 1, rgb(r.light.color), r.flash)
+        end
+        if r.shock > 0 then
+            burst(slot, "shock", 1, nil, r.shock)
+        end
+        if r.arcs > 0 then
+            burst(slot, "sparks", r.arcs, Color3.fromRGB(150, 220, 255), 0.24)
+        end
+        if r.dust > 0 then
+            burst(slot, "dust", r.dust, if r.family == "TRACK" or r.family == "LEG" then TRACK_DIRT else rgb(Config.fx.metal.dust), r.dustSize)
+        end
+        if r.chips > 0 then
+            burst(slot, "chips", r.chips, rgb(Config.fx.metal.debris), 0.5)
+        end
+        if r.smoke > 0 then
+            burst(slot, "smoke", r.smoke, if r.steam then Color3.fromRGB(190, 200, 205) else Color3.fromRGB(46, 46, 48), 1.2 + r.smoke * 0.4)
+        end
+        local light = r.light
+        glowLight(slot, rgb(light.color), light.brightness, light.range, light.decay)
+        for _ = 1, r.fragments do
+            local dir = (normal + V3(rng:NextNumber(-0.7, 0.7), rng:NextNumber(0, 0.7), rng:NextNumber(-0.7, 0.7))).Unit
+            local s = rng:NextNumber(0.5, 1.1)
+            spawnFragment(pos + normal * 0.5, dir * rng:NextNumber(22, 44), V3(s * 1.2, s * 0.22, s * 0.9), rgb(Config.fx.metal.debris):Lerp(Color3.new(0, 0, 0), rng:NextNumber(0, 0.3)), Enum.Material.Metal, 9, 2.0)
+        end
+        for _, key in ipairs({ "sound", "sound2" }) do
+            local s = r[key]
+            local def = s and Config.audio[s.name]
+            if def then
+                play(s.name, pos, s.volume / def.volume, s.pitch)
+            end
+        end
+    end
+
     -- Impact on a surface ("h"). family: panel|concrete|metal|structure|machine; class: MG|LASER|HEAVY.
     local function impact(e)
+        if e.c then
+            return machineImpact(e)
+        end
         stats.hits += 1
         local pos, normal = e.p, e.n
         if not nearCamera(pos) then
@@ -399,13 +487,91 @@ function Fx.Start(remotes, hud)
             burst(slot, "smoke", 10, Color3.fromRGB(46, 46, 48), 6 * power)
             burst(slot, "sparks", 30, Color3.fromRGB(255, 190, 90), 0.5)
             burst(slot, "chips", 14, Color3.fromRGB(40, 40, 42), 0.7)
-            glowLight(slot, Color3.fromRGB(255, 170, 80), 6, 36, 7)
+            glowLight(slot, Color3.fromRGB(255, 170, 80), 3.6, 28, 7)
             play("explosion", pos, math.min(1, 0.55 + power * 0.2), 1)
             for _ = 1, 4 do
                 local dir = V3(rng:NextNumber(-1, 1), rng:NextNumber(0.5, 1.6), rng:NextNumber(-1, 1)).Unit
                 local s = rng:NextNumber(0.6, 1.6) * math.min(power, 2)
                 spawnFragment(pos, dir * rng:NextNumber(30, 60), V3(s, s * 0.6, s * 1.2), Color3.fromRGB(34, 34, 36), Enum.Material.Metal, 10, 3)
             end
+        elseif e.k == "trackbreak" then
+            -- A track lets go: a hard clang, sparks, a rolling dirt cloud and a handful of thrown links.
+            local back = if e.v then (e.v - pos) else V3(0, 0, 1)
+            back = if back.Magnitude > 0.1 then back.Unit else V3(0, 0, 1)
+            slot.dust.SpreadAngle = Vector2.new(120, 120)
+            burst(slot, "dust", 14, TRACK_DIRT, 5)
+            burst(slot, "sparks", 28, Color3.fromRGB(255, 200, 100), 0.4)
+            burst(slot, "smoke", 4, Color3.fromRGB(44, 44, 46), 3)
+            burst(slot, "flash", 1, Color3.fromRGB(255, 226, 170), 6)
+            burst(slot, "chips", 8, Color3.fromRGB(40, 41, 43), 0.5)
+            glowLight(slot, Color3.fromRGB(255, 190, 110), 2.2, 16, 9)
+            play("metalHit", pos, 1.0, 0.55)
+            play("zap", pos, 0.6, 0.7)
+            for _ = 1, 5 do
+                local dir = (back * 0.8 + V3(rng:NextNumber(-0.5, 0.5), rng:NextNumber(0.4, 1.1), rng:NextNumber(-0.5, 0.5))).Unit
+                spawnFragment(pos, dir * rng:NextNumber(14, 30), V3(2.4, 0.2, 0.8), Color3.fromRGB(36, 37, 39), Enum.Material.Metal, 8, 2.6)
+            end
+        elseif e.k == "turretbreak" then
+            -- The turret mechanism fails: an electrical burst at the gun mount and the ring, hatch pieces thrown up.
+            burst(slot, "sparks", 30, Color3.fromRGB(140, 220, 255), 0.34)
+            burst(slot, "sparks", 14, Color3.fromRGB(255, 200, 110), 0.3)
+            burst(slot, "smoke", 6, Color3.fromRGB(40, 40, 42), 3.4)
+            burst(slot, "flash", 1, Color3.fromRGB(200, 236, 255), 8)
+            burst(slot, "shock", 1, nil, 12)
+            glowLight(slot, Color3.fromRGB(150, 220, 255), 2.4, 18, 8)
+            play("explosion", pos, 0.45, 1.6)
+            play("zap", pos, 0.9, 0.9)
+            for _ = 1, 3 do
+                local dir = V3(rng:NextNumber(-0.6, 0.6), rng:NextNumber(0.9, 1.5), rng:NextNumber(-0.6, 0.6)).Unit
+                local s = rng:NextNumber(0.7, 1.4)
+                spawnFragment(pos + V3(0, 2, 0), dir * rng:NextNumber(18, 34), V3(s * 1.4, s * 0.25, s), Color3.fromRGB(72, 76, 72), Enum.Material.Metal, 9, 2.6)
+            end
+        elseif e.k == "hullbreak" then
+            -- The turret ring fails in the hull explosion: shock ring, heavy chips and large plates thrown clear.
+            burst(slot, "flash", 1, Color3.fromRGB(255, 232, 190), 12)
+            burst(slot, "shock", 1, nil, 24)
+            burst(slot, "fire", 10, nil, 5)
+            burst(slot, "sparks", 36, Color3.fromRGB(255, 190, 90), 0.5)
+            burst(slot, "chips", 14, Color3.fromRGB(40, 40, 42), 0.7)
+            burst(slot, "smoke", 6, Color3.fromRGB(40, 40, 42), 6)
+            glowLight(slot, Color3.fromRGB(255, 170, 80), 3.4, 26, 6)
+            play("explosion", pos, 0.8, 1.1)
+            for _ = 1, 5 do
+                local dir = V3(rng:NextNumber(-1, 1), rng:NextNumber(0.7, 1.6), rng:NextNumber(-1, 1)).Unit
+                local s = rng:NextNumber(1.1, 2.2)
+                spawnFragment(pos, dir * rng:NextNumber(24, 48), V3(s * 1.6, s * 0.28, s * 1.1), Color3.fromRGB(72, 78, 72):Lerp(Color3.new(0, 0, 0), rng:NextNumber(0.1, 0.5)), Enum.Material.Metal, 8, 3.2)
+            end
+        elseif e.k == "mechfail" then
+            -- A mech region failed. Arm: the weapon assembly dies in a spray of sparks and a small fire; leg: an actuator bursts, dust and smoke; reactor: a
+            -- bright arc flash and a plume of coolant steam. (The darkened armour, fault lamps and smoke that follow are MechDamageFx.)
+            local region = e.comp or ""
+            local reactor = region == "REACTOR"
+            local leg = string.find(region, "^LEG") ~= nil
+            burst(slot, "flash", 1, if reactor then Color3.fromRGB(190, 235, 255) else Color3.fromRGB(255, 220, 160), if reactor then 9 else 6)
+            burst(slot, "sparks", if reactor then 34 else 24, if reactor then Color3.fromRGB(150, 220, 255) else Color3.fromRGB(255, 190, 100), 0.34)
+            burst(slot, "smoke", if reactor then 6 else 3, if reactor then Color3.fromRGB(190, 200, 205) else Color3.fromRGB(40, 40, 42), if reactor then 5 else 3)
+            if leg then
+                burst(slot, "dust", 10, TRACK_DIRT, 4)
+            else
+                burst(slot, "fire", 5, nil, 2.6)
+            end
+            burst(slot, "shock", 1, nil, 12)
+            glowLight(slot, if reactor then Color3.fromRGB(160, 225, 255) else Color3.fromRGB(255, 180, 90), 2.6, 18, 8)
+            play("explosion", pos, 0.5, 1.5)
+            play("zap", pos, 0.7, 1.0)
+            for _ = 1, if leg then 4 else 3 do
+                local dir = V3(rng:NextNumber(-1, 1), rng:NextNumber(0.4, 1.3), rng:NextNumber(-1, 1)).Unit
+                local s = rng:NextNumber(0.5, 1.2)
+                spawnFragment(pos, dir * rng:NextNumber(14, 34), V3(s * 1.2, s * 0.3, s), Color3.fromRGB(70, 74, 72):Lerp(Color3.new(0, 0, 0), rng:NextNumber(0.1, 0.5)), Enum.Material.Metal, 9, 2.4)
+            end
+        elseif e.k == "cookoff" then
+            burst(slot, "flash", 1, Color3.fromRGB(255, 220, 160), 7 * power)
+            burst(slot, "fire", 6, nil, 3 * power)
+            burst(slot, "shock", 1, nil, 12 * power)
+            burst(slot, "sparks", 18, Color3.fromRGB(255, 200, 100), 0.4)
+            burst(slot, "smoke", 3, Color3.fromRGB(44, 44, 46), 4)
+            glowLight(slot, Color3.fromRGB(255, 180, 90), 2.6, 20, 8)
+            play("explosion", pos, 0.5, 1.45)
         elseif e.k == "wreck" then
             burst(slot, "sparks", 26, Color3.fromRGB(130, 220, 255), 0.34, 1.5)
             burst(slot, "sparks", 12, Color3.fromRGB(255, 200, 110), 0.3)
@@ -546,7 +712,7 @@ function Fx.Start(remotes, hud)
         return nil
     end
     control.Parent = player.PlayerScripts
-    return { Clear = clearAll }
+    return { Clear = clearAll, SetMachineHook = function(fn) machineHook = fn end }
 end
 
 return Fx

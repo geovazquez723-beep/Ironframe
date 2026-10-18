@@ -78,6 +78,9 @@ function WorldBuilder.Initialize()
     grade.TintColor = Color3.fromRGB(250, 252, 255)
 
     AssetLibrary.Load()
+    -- M11B: the textured tank's hit geometry is its own mesh, rebuilt once with precise collision (about a second per mesh, in parallel).
+    local built, failed = require(script.Parent.TrainingTank).PrepareAssets()
+    print(string.format("[IF-TANK] precise hit meshes: %d built, %d failed (%.1fs)", built, failed, require(script.Parent.TankParts).stats.seconds))
     print(string.format("[IF-COCKPIT] Replicated %d cockpit AI assets to clients", AssetLibrary.Publish("CPT_", "IronframeCockpitAssets")))
     print("[IF-STEP-01] Industrial hangar world initialized")
 end

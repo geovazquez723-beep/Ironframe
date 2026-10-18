@@ -7,6 +7,8 @@ local Rig = require(Shared.MechRig)
 local Geometry = require(Shared.WeaponGeometry)
 local Energy = require(Shared.Energy)
 local Targets = require(script.Parent.CombatTargets)
+local HitDebug = require(script.Parent.HitDebug)
+local Destructibles = require(script.Parent.Destructibles)
 local EnergySystems = require(script.Parent.EnergySystems)
 local Weapons = {}
 local function enabled(session)
@@ -36,6 +38,57 @@ end
 function Weapons.Cancel(session)
     if session.weapons then session.weapons.held = false; session.weapons.reason = "SAFE" end
     if session.mech then session.mech:SetAttribute("WeaponAim",nil); session.mech:SetAttribute("WeaponState","SAFE") end
+end
+-- Surface normal at a ray hit on a mesh: a plane through the hit and four parallel probe rays 0.7 studs around it (only probes landing on the same
+-- surface count). Falls back to the reported normal. Pure geometry; cheap (4 rays) and only evaluated for mesh hits.
+local PROBE = 0.7
+function Weapons.SurfaceNormal(result, origin, direction, params)
+    local fallback = result.Normal
+    local up = math.abs(direction.Y) > 0.95 and Vector3.new(1,0,0) or Vector3.new(0,1,0)
+    local right = direction:Cross(up).Unit
+    local top = right:Cross(direction).Unit
+    local points = {}
+    local distance = (result.Position-origin).Magnitude
+    for i, offset in ipairs({right*PROBE, -right*PROBE, top*PROBE, -top*PROBE}) do
+        local probe = workspace:Raycast(origin+offset,direction*(distance+3),params)
+        if probe and math.abs((probe.Position-(origin+offset)).Magnitude-distance) < 1.6 then points[i] = probe.Position end
+    end
+    local a,b,c,d = points[1],points[2],points[3],points[4]
+    if not (a and b and c and d) then return fallback end
+    local n = (a-b):Cross(c-d)
+    if n.Magnitude < 1e-4 then return fallback end
+    n = n.Unit
+    if n:Dot(-direction) < 0 then n = -n end
+    if n:Dot(-direction) < 0.12 then return fallback end -- a grazing fit is unreliable
+    return n
+end
+-- One hitscan shot: the world ray (the nearest queryable surface wins), then the damage path for whatever it struck. Shared by the live weapon step
+-- and the server-only audit (`shoot`), so tests exercise the exact production path. `exclude` is the shooter's own model.
+-- Returns { endpoint, normal?, damage, name, instance? }.
+function Weapons.Strike(exclude, origin, direction, spec, weaponId, now)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = exclude and {exclude} or {}
+    local result = workspace:Raycast(origin,direction*spec.range,params)
+    local endpoint = result and result.Position or origin + direction*spec.range
+    -- A convex-decomposition mesh reports the normal of the convex piece it hit, which can lean well away from the visible surface in dishes and
+    -- around rounded armour. Impact marks and sparks use a plane fitted to four neighbouring rays instead.
+    local normal = result and result.Normal
+    if result and result.Instance:IsA("MeshPart") then
+        normal = Weapons.SurfaceNormal(result,origin,direction,params)
+    end
+    -- Fitted-volume machines (ROOK-01) have no parts to raycast: ask for the nearest analytic contact along the same ray. Cover (any nearer world
+    -- surface) still wins, because the probe is limited to the world hit distance.
+    local reach = result and result.Distance or spec.range
+    local probe = Destructibles.Probe(origin,direction,reach)
+    if probe and probe.t <= reach then
+        local damage = Destructibles.HitVolume(probe,spec.category,spec.damage,{weapon=weaponId,origin=origin})
+        HitDebug.Path(origin,probe.position,true)
+        return {endpoint=probe.position,normal=probe.normal,damage=damage,name=probe.comp,comp=probe.comp}
+    end
+    local damage = result and Targets.Hit(result.Instance,spec.category,spec.damage,now,{weapon=weaponId,position=result.Position,normal=normal,origin=origin}) or 0
+    HitDebug.Path(origin,endpoint,result ~= nil)
+    return {endpoint=endpoint,normal=normal,damage=damage,name=result and result.Instance.Name or "",instance=result and result.Instance}
 end
 function Weapons.Step(session, effects)
     local s = session.weapons
@@ -85,17 +138,12 @@ function Weapons.Step(session, effects)
             return true
         end)
         if fired then
-            local params = RaycastParams.new()
-            params.FilterType = Enum.RaycastFilterType.Exclude
-            params.FilterDescendantsInstances = {model}
             local spec = slot.spec
-            local result = workspace:Raycast(origin,direction*spec.range,params)
-            local endpoint = result and result.Position or origin + direction*spec.range
-            local damage = result and Targets.Hit(result.Instance,spec.category,spec.damage,now,{weapon=slot.id,position=result.Position,normal=result.Normal,origin=origin}) or 0
-            if damage > 0 then s.hits += 1; s.lastHit = result.Instance.Name; s.lastDamage = damage; s.dealt = (s.dealt or 0) + damage end
+            local strike = Weapons.Strike(model,origin,direction,spec,slot.id,now)
+            if strike.damage > 0 then s.hits += 1; s.lastHit = strike.name; s.lastDamage = strike.damage; s.dealt = (s.dealt or 0) + strike.damage end
             local shotAt = workspace:GetServerTimeNow()
             model:SetAttribute("WeaponShotAt",shotAt)
-            effects:FireAllClients(model,socket,slot.id,origin,endpoint,result and result.Normal or -direction,damage)
+            effects:FireAllClients(model,socket,slot.id,origin,strike.endpoint,strike.normal or -direction,strike.damage)
         end
         if s.reason == "ENERGY LOW" and s.reserved then s.reason = "RESERVED" end
     else s.reason = if not live then "SAFE" elseif not slot then "UNAVAILABLE" elseif slot.reloadAt then "RELOADING" elseif now < slot.nextShot then "COOLDOWN" else "READY" end

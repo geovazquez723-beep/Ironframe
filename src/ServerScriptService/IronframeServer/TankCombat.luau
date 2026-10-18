@@ -29,6 +29,7 @@ local TrainingTank = require(script.Parent.TrainingTank)
 local Locomotion = require(script.Parent.Locomotion)
 local EnergySystems = require(script.Parent.EnergySystems)
 local BastionDamage = require(script.Parent.BastionDamage)
+local MechHit = require(script.Parent.MechHit) -- M11B
 
 local TankCombat = {}
 
@@ -122,9 +123,18 @@ local function targetOf(d)
     end
     local s = c.state
     local heading = V3(-math.sin(s.yaw), 0, -math.cos(s.yaw))
+    -- M11B: shells are resolved against the Bastion's FITTED compound volumes (its armour, frame, arms, legs and reactor in the chassis frame), not
+    -- one box around the whole machine. Built once per rig model (a rebuilt rig, e.g. after a new loadout, fits again) and kept on the session.
+    local volumes = session.hitVolumes
+    if not volumes or volumes.model ~= mech then
+        volumes = MechHit.Build(mech)
+        volumes.model = mech
+        session.hitVolumes = volumes
+    end
     return {
         session = session, player = player, controller = c, position = V3(s.x, s.y, s.z), velocity = heading * s.speed, yaw = s.yaw,
-        hullCF = Locomotion.HullPose(c.params, s), hull = c.params.hull,
+        hullCF = Locomotion.HullPose(c.params, s), hull = c.params.hull, chassisCF = Locomotion.ChassisCFrame(c),
+        volumes = if #volumes.boxes > 0 then volumes else nil,
     }, session, true
 end
 
@@ -318,7 +328,7 @@ local function cancelAll(d, c, why: string)
 end
 
 -- A shell reached the Bastion's hull. Shield first (existing interface, existing energy economy), then components.
-local function resolveMechHit(d, c, p, target, contact: Vector3, normal: Vector3)
+local function resolveMechHit(d, c, p, target, contact: Vector3, normal: Vector3, volumeRegion: string?)
     local session = target.session
     local dir = p.vel.Unit
     local attack = { category = p.category or "ballistic", damage = p.damage, fromX = -dir.X, fromZ = -dir.Z }
@@ -339,9 +349,13 @@ local function resolveMechHit(d, c, p, target, contact: Vector3, normal: Vector3
     else
         stats.unguarded += 1
     end
-    local p0 = target.hullCF:PointToObjectSpace(contact)
-    local hull = target.hull
-    local region = MechDamage.RegionAt(p0.X, p0.Y, p0.Z, hull.width, hull.height, hull.depth)
+    local region = volumeRegion
+    if not region then
+        -- Fallback (no fitted volumes): the M10B box regions.
+        local p0 = target.hullCF:PointToObjectSpace(contact)
+        local hull = target.hull
+        region = MechDamage.RegionAt(p0.X, p0.Y, p0.Z, hull.width, hull.height, hull.depth)
+    end
     local mech = session.mech
     if mech and mech.Parent then
         mech:SetAttribute("LastHitRegion", region)
@@ -350,9 +364,18 @@ local function resolveMechHit(d, c, p, target, contact: Vector3, normal: Vector3
         mech:SetAttribute("LastHitPenetrating", math.floor(penetrating * 10 + 0.5) / 10)
         mech:SetAttribute("LastHitSerial", (mech:GetAttribute("LastHitSerial") or 0) + 1)
     end
-    endShell(c, p, "MECH", { n = normal, region = region, timing = timing, prevented = prevented, pen = penetrating, dmg = p.damage, from = p.tankId })
+    local shielded = if prevented > 0 then MechHit.ShieldPoint(target.chassisCF, contact, dir) else nil
+    -- p: where the round struck the armour (the contact point on the registered volume, not the shell centre); sp: where a shield interception is drawn.
+    endShell(c, p, "MECH", { p = contact, n = normal, region = region, timing = timing, prevented = prevented, pen = penetrating, dmg = p.damage, from = p.tankId, sp = shielded })
     if penetrating > 0 then
-        BastionDamage.Hit(session, region, penetrating)
+        local outcome = BastionDamage.Hit(session, region, penetrating)
+        if outcome then
+            for failed, stage in pairs(outcome.stageChanged) do
+                if stage == "FAILED" and failed ~= "CORE" then
+                    Destructibles.MechFailure(d, failed, contact) -- an arm assembly, a leg or the reactor just failed: show it where it was struck
+                end
+            end
+        end
     end
 end
 
@@ -382,19 +405,29 @@ local function stepShells(d, c, target, dt: number, now: number)
         -- World: swept sphere against everything queryable (intact cover blocks, destroyed cover is gone).
         local worldHit = workspace:Spherecast(p.pos, p.radius, step, params)
         local worldDistance = if worldHit then worldHit.Distance else math.huge
-        -- Bastion: ray against the authoritative hull box inflated by the shell radius (conservative swept sphere).
-        local mechT, mnx, mny, mnz
-        local local0 = target.hullCF:PointToObjectSpace(p.pos)
-        local localDir = target.hullCF:VectorToObjectSpace(dir)
-        mechT, mnx, mny, mnz = Math.rayBox(local0.X, local0.Y, local0.Z, localDir.X, localDir.Y, localDir.Z,
-            hull.width / 2 + p.radius, hull.height / 2 + p.radius, hull.depth / 2 + p.radius, length)
+        -- Bastion: the nearest fitted volume along the path, each inflated by the shell radius (conservative swept sphere); the first legitimate
+        -- surface wins, so overlapping volumes of one machine damage one region once. Fallback: the M10B hull box.
+        local mechT, normal, region
+        if target.volumes then
+            local hit = MechHit.Ray(target.volumes, target.chassisCF, p.pos, dir, math.min(length, worldDistance), p.radius)
+            if hit then
+                mechT, normal, region = hit.t, hit.normal, hit.comp
+            end
+        else
+            local local0 = target.hullCF:PointToObjectSpace(p.pos)
+            local localDir = target.hullCF:VectorToObjectSpace(dir)
+            local t, mnx, mny, mnz = Math.rayBox(local0.X, local0.Y, local0.Z, localDir.X, localDir.Y, localDir.Z,
+                hull.width / 2 + p.radius, hull.height / 2 + p.radius, hull.depth / 2 + p.radius, length)
+            if t then
+                mechT, normal = t, target.hullCF:VectorToWorldSpace(V3(mnx :: number, mny :: number, mnz :: number))
+            end
+        end
         local done = false
         if mechT and mechT <= worldDistance then
             local centre = p.pos + dir * mechT
-            local normal = target.hullCF:VectorToWorldSpace(V3(mnx :: number, mny :: number, mnz :: number))
-            local contact = centre - normal * p.radius
+            local contact = centre - (normal :: Vector3) * p.radius
             p.pos = centre
-            resolveMechHit(d, c, p, target, contact, normal)
+            resolveMechHit(d, c, p, target, contact, normal :: Vector3, region)
             done = true
         elseif worldHit then
             local inst = worldHit.Instance
@@ -444,7 +477,8 @@ local function stepTank(d, c, tank, target, active: boolean, dt: number, now: nu
         leadPoint = V3(ax, aim.Y, az)
         relYaw = Math.wrap(math.atan2(-(ax - pos.X), -(az - pos.Z)) - tank.yaw)
         s.inArc = math.abs(relYaw) <= arch.traverse
-        s.aimError = math.abs(Math.wrap(tank.turretYaw - math.clamp(relYaw, -arch.traverse, arch.traverse)))
+        -- The barrel of the textured tank is not parallel to the turret front (tank.barrelYaw): lay the BARREL on the target, not the turret front.
+        s.aimError = math.abs(Math.wrap(tank.turretYaw - math.clamp(relYaw - (tank.barrelYaw or 0), -arch.traverse, arch.traverse)))
     end
     local previous = ai.state
     local out = Brain.Step(ai, dt, s)
@@ -469,7 +503,7 @@ local function stepTank(d, c, tank, target, active: boolean, dt: number, now: nu
         elseif out.turret == "aim" then
             rate = arch.turretRate * arch.aimRateScale
         end
-        local want = if relYaw then math.clamp(relYaw, -arch.traverse, arch.traverse) else tank.turretYaw
+        local want = if relYaw then math.clamp(relYaw - (tank.barrelYaw or 0), -arch.traverse, arch.traverse) else tank.turretYaw
         local yaw = tank.turretYaw + math.clamp(Math.wrap(want - tank.turretYaw), -rate * dt, rate * dt)
         local recoil = 0
         if tank.recoilAt then

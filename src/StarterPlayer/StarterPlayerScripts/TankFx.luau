@@ -127,7 +127,9 @@ function TankFx.Start(remotes, hud)
         Debris:AddItem(holder, 3)
     end
 
-    local function burst(position: Vector3, normal: Vector3, color: Color3, power: number, ringColor: Color3?)
+    -- `shield` = a pulse-shield interception: a wide expanding ring and a few cool sparks, no smoke, no metal - it must read as an energy field, not as
+    -- a shell striking armour.
+    local function burst(position: Vector3, normal: Vector3, color: Color3, power: number, ringColor: Color3?, shield: boolean?)
         local rig = table.remove(burstFree)
         if not rig then
             rig = table.remove(bursts, 1) -- recycle the oldest
@@ -137,14 +139,16 @@ function TankFx.Start(remotes, hud)
         rig.host.Color, rig.host.Size = color, Vector3.one * (0.6 + power * 0.4)
         rig.host.Transparency = 0.1
         rig.sparks.Color = ColorSequence.new(HOT, color)
-        rig.sparks:Emit(math.floor(10 + 14 * power))
-        rig.smoke:Emit(math.floor(3 + 4 * power))
+        rig.sparks:Emit(if shield then math.floor(6 + 5 * power) else math.floor(10 + 14 * power))
+        if not shield then
+            rig.smoke:Emit(math.floor(3 + 4 * power))
+        end
         rig.light.Color, rig.light.Brightness = color, 3 + 4 * power
         rig.ring.Color = ringColor or color
         rig.ring.CFrame = CFrame.lookAt(position, position + normal) * CFrame.Angles(0, math.pi / 2, 0)
         rig.ring.Size = Vector3.new(0.15, 1, 1)
         rig.ring.Transparency = 0.2
-        rig.power = power
+        rig.power = if shield then power * 1.5 else power
         table.insert(bursts, rig)
     end
 
@@ -199,7 +203,12 @@ function TankFx.Start(remotes, hud)
         if shell then
             shell.ended = true
             shell.endAt = os.clock()
-            shell.rig.core.CFrame = CFrame.lookAt(e.p, e.p + shell.v.Unit)
+            -- A round fully absorbed by the pulse shield ends at the shield plane (outside the hull), not at the armour behind it.
+            local stopAt = e.p
+            if e.why == "MECH" and e.sp and (e.timing == "PERFECT" or e.timing == "GUARD") and (e.pen or 0) <= 0.01 then
+                stopAt = e.sp
+            end
+            shell.rig.core.CFrame = CFrame.lookAt(stopAt, stopAt + shell.v.Unit)
             shell.rig.core.Transparency = 1
             shell.rig.smoke.Enabled, shell.rig.light.Enabled = false, false
         end
@@ -208,14 +217,22 @@ function TankFx.Start(remotes, hud)
             burst(e.p, e.n or Vector3.yAxis, if e.wk == "LR" then CYAN else AMBER, power, nil)
         elseif e.why == "MECH" then
             local timing = e.timing
-            if timing == "PERFECT" then
-                burst(e.p, e.n, GOLD, power * 1.1, CYAN)
-                play(DestructionConfig.audio.zap.id, e.p, 0.9, 1.2)
-            elseif timing == "GUARD" then
-                burst(e.p, e.n, CYAN, power, nil)
-                play(DestructionConfig.audio.zap.id, e.p, 0.8, 0.9)
-            else
-                burst(e.p, e.n, RED, power * 1.25, AMBER)
+            local shielded = timing == "PERFECT" or timing == "GUARD"
+            local absorbed = shielded and (e.pen or 0) <= 0.01
+            if shielded and e.sp then
+                -- The interception happens at the shield plane, outside the hull. A fully absorbed round ends there; one that bled through carries on to
+                -- the armour (below) with its remaining energy.
+                local plane = e.sp
+                local facing = if shell then -shell.v.Unit else e.n
+                burst(plane, facing, if timing == "PERFECT" then GOLD else CYAN, power, if timing == "PERFECT" then CYAN else nil, true)
+                play(DestructionConfig.audio.zap.id, plane, if timing == "PERFECT" then 0.9 else 0.8, if timing == "PERFECT" then 1.2 else 0.9)
+            elseif shielded then
+                burst(e.p, e.n, if timing == "PERFECT" then GOLD else CYAN, power, nil, true)
+                play(DestructionConfig.audio.zap.id, e.p, 0.8, 1.0)
+            end
+            if not absorbed then
+                -- Armour contact: the real contact point on the machine's visible surface, metal colours (red-hot when it penetrated unguarded).
+                burst(e.p, e.n, if shielded then AMBER else RED, if shielded then power * 0.7 else power * 1.25, AMBER)
                 play(DestructionConfig.audio.metalHit.id, e.p, 1, 0.7)
             end
         elseif e.why == "EXPIRE" then
@@ -355,9 +372,11 @@ function TankFx.Start(remotes, hud)
                 rig.light.Color = AMBER:Lerp(HOT, f)
                 -- Targeting beam: the last 45 % of the warning, along the barrel, flickering faster as the shot nears.
                 if f > 0.55 and mine then
-                    local distance = math.clamp((mine.Position - muzzle.Position).Magnitude, 20, 300)
+                    -- The beam shows the shot line (from the real muzzle toward the Bastion), not the barrel axis: the textured gun points a few degrees up.
+                    local aimAt = mine.Position + Vector3.new(0, 9, 0)
+                    local distance = math.clamp((aimAt - muzzle.Position).Magnitude, 20, 300)
                     rig.beam.Size = Vector3.new(0.2 + 0.1 * f, 0.2 + 0.1 * f, distance)
-                    rig.beam.CFrame = muzzle * CFrame.new(0, 0, -distance / 2)
+                    rig.beam.CFrame = CFrame.lookAt(muzzle.Position, aimAt) * CFrame.new(0, 0, -distance / 2)
                     rig.beam.Transparency = 0.35 + 0.35 * math.sin(now * (14 + 40 * f)) ^ 2
                 else
                     rig.beam.Transparency = 1

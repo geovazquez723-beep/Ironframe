@@ -291,21 +291,16 @@ local function clearAll(entry)
 end
 
 -- Scorch discs ----------------------------------------------------------------------------------------------------------------
--- Welds (every frame, see the render step) a dark disc to the rig part of `region` nearest to the world contact point.
-function MechDamageFx.OnHit(e)
-    if e.why ~= "MECH" or not e.region or not e.p then
+-- Welds (every frame, see the render step) a dark disc to the rig part of `region` nearest to the world contact point. The contact point is where the
+-- round struck the fitted volume (M11B: on the visible armour), and the disc snaps to that part's nearest face so it sits ON the armour.
+local function place(model: Model, entry, region: string, point: Vector3, diameter: number)
+    local r = entry.regions[region]
+    if not r then
         return
     end
-    local folder = workspace:FindFirstChild("IronframeMechs")
-    local model = folder and folder:FindFirstChild(tostring(game:GetService("Players").LocalPlayer.UserId))
-    local entry = model and entries[model]
-    if not entry or e.pen <= 0 or #entry.discs >= MAX_DISCS or entry.discCount[e.region] >= DISCS_PER_REGION then
-        return
-    end
-    local r = entry.regions[e.region]
     local best, bestDistance
     for _, info in ipairs(r.parts) do
-        local d = (info.part.Position - e.p).Magnitude
+        local d = (info.part.Position - point).Magnitude
         if info.part.Material ~= Enum.Material.Neon and (not bestDistance or d < bestDistance) then
             best, bestDistance = info.part, d
         end
@@ -313,9 +308,8 @@ function MechDamageFx.OnHit(e)
     if not best then
         return
     end
-    local local0 = best.CFrame:PointToObjectSpace(e.p)
+    local local0 = best.CFrame:PointToObjectSpace(point)
     local half = best.Size / 2
-    -- Snap to the part's nearest face so the disc sits on armour rather than floating at the hull box.
     local dx, dy, dz = half.X - math.abs(local0.X), half.Y - math.abs(local0.Y), half.Z - math.abs(local0.Z)
     local face, offset
     if dx <= dy and dx <= dz then
@@ -328,17 +322,54 @@ function MechDamageFx.OnHit(e)
     if face.Magnitude == 0 then
         face, offset = Vector3.new(0, 1, 0), Vector3.new(0, half.Y, 0)
     end
-    local diameter = if e.heavy then 3.4 else 2.2
     local disc = Instance.new("Part")
     disc.Name = "Scorch"
     disc.Shape = Enum.PartType.Cylinder
     disc.Size = Vector3.new(0.08, diameter, diameter)
     disc.Anchored, disc.CanCollide, disc.CanQuery, disc.CanTouch, disc.CastShadow = true, false, false, false, false
-    disc.Material, disc.Color, disc.Transparency = Enum.Material.Slate, Color3.fromRGB(14, 13, 12), 0.1
+    -- Dark armour needs a LIGHT mark: scorching black plate is invisible, a scuffed, bare-metal pit shows. Light armour takes the dark char.
+    local c = best.Color
+    local dark = (0.3 * c.R + 0.59 * c.G + 0.11 * c.B) < 0.3
+    disc.Material, disc.Color, disc.Transparency = if dark then Enum.Material.Metal else Enum.Material.Slate, if dark then Color3.fromRGB(150, 152, 150) else Color3.fromRGB(14, 13, 12), if dark then 0.15 else 0.1
     disc.Parent = model
     local cf = CFrame.lookAt(offset + face * 0.05, offset + face * 2) * CFrame.Angles(0, math.pi / 2, 0)
-    table.insert(entry.discs, { part = disc, host = best, cf = cf })
-    entry.discCount[e.region] += 1
+    table.insert(entry.discs, { part = disc, host = best, cf = cf, region = region })
+    entry.discCount[region] += 1
+end
+
+-- Shells that got through the shield and struck the local Bastion (TankFx end events).
+function MechDamageFx.OnHit(e)
+    if e.why ~= "MECH" or not e.region or not e.p then
+        return
+    end
+    local folder = workspace:FindFirstChild("IronframeMechs")
+    local model = folder and folder:FindFirstChild(tostring(game:GetService("Players").LocalPlayer.UserId))
+    local entry = model and entries[model]
+    if not entry or e.pen <= 0 or #entry.discs >= MAX_DISCS or entry.discCount[e.region] >= DISCS_PER_REGION then
+        return
+    end
+    place(model, entry, e.region, e.p, if e.heavy then 3.4 else 2.2)
+end
+
+-- The player's weapons striking ROOK-01 (DestructionFx 'h' events with a component): a bounded ring of marks, recycled oldest first so sustained
+-- machine-gun fire keeps showing where the machine was hit without ever growing past MAX_DISCS. Regions are the Bastion's six; `callsign` is e.o.
+local DIAMETER = { MG = 0.9, LASER = 1.6, HEAVY = 3.0 }
+function MechDamageFx.OnMachineHit(e)
+    if not e.c or not e.p or (e.m or 0) <= 0 then
+        return
+    end
+    local folder = workspace:FindFirstChild("IronframeMechs")
+    local model = folder and folder:FindFirstChild(tostring(e.o))
+    local entry = model and entries[model]
+    if not entry or not entry.regions[e.c] then
+        return
+    end
+    if #entry.discs >= MAX_DISCS then
+        local old = table.remove(entry.discs, 1)
+        old.part:Destroy()
+        entry.discCount[old.region] = math.max(0, entry.discCount[old.region] - 1)
+    end
+    place(model, entry, e.c, e.p, DIAMETER[e.w] or 0.9)
 end
 
 -- Driver ------------------------------------------------------------------------------------------------------------------------
@@ -472,6 +503,7 @@ function MechDamageFx.Start()
         return { discs = discs, emitters = emitters, images = imageCount, ms = perf.ms, worstMs = perf.worst }
     end
     api.OnHit = MechDamageFx.OnHit
+    api.OnMachineHit = MechDamageFx.OnMachineHit
     return api
 end
 

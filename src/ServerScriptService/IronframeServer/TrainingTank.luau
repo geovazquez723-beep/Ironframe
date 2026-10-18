@@ -20,14 +20,17 @@ local Brain = require(Shared:WaitForChild("TankBrain"))
 local CombatConfig = require(Shared:WaitForChild("CombatConfig"))
 local DestructionConfig = require(Shared:WaitForChild("DestructionConfig"))
 local Math = require(Shared:WaitForChild("CombatMath"))
+local TankHit = require(Shared:WaitForChild("TankHit"))
 local Destructibles = require(script.Parent.Destructibles)
 local AssetLibrary = require(script.Parent.AssetLibrary)
+local TankParts = require(script.Parent.TankParts)
 
 local TrainingTank = {}
 
 local V3, CF, ANG = Vector3.new, CFrame.new, CFrame.Angles
 local METAL, PLATE, SMOOTH = Enum.Material.Metal, Enum.Material.DiamondPlate, Enum.Material.SmoothPlastic
 local SOOT = Color3.fromRGB(22, 22, 24)
+local UP_REF = V3(0, 1, 0)
 
 TrainingTank.PALETTES = {
     OLIVE = { hull = Color3.fromRGB(70, 80, 54), trim = Color3.fromRGB(46, 52, 38), steel = Color3.fromRGB(52, 56, 58), mark = Color3.fromRGB(214, 120, 36) },
@@ -46,7 +49,7 @@ local function weld(parent: BasePart, child: BasePart, c0: CFrame): Weld
 end
 
 local function newBuild(d, tank)
-    local b = { d = d, tank = tank, parts = {}, base = {}, groups = {}, skin = {}, skinned = false, tracks = {} }
+    local b = { d = d, tank = tank, parts = {}, base = {}, groups = {}, skin = {}, skinned = false, tracks = {}, shells = {}, skinSource = {}, precise = false }
     local model = Instance.new("Model")
     model.Name = "TrainingTank_" .. tank.id
     model:SetAttribute("TrainingVehicle", true)
@@ -235,10 +238,14 @@ local function buildProcedural(b, tank)
 end
 
 -- Skinned build (AI-generated, segmented tank mesh TNK_001: hull / turret+gun / left track / right track) --------------------
--- Visual only. Hit geometry is a fixed set of invisible boxes (numbers measured against the scaled mesh in Studio), so hit
--- detection, component rules and attachment points are identical to the procedural tank and never depend on mesh topology.
+-- M11B: the visible mesh IS the hit geometry. TankParts rebuilds each mesh once per server as a PreciseConvexDecomposition MeshPart (within about
+-- 0.03 studs of the drawn surface); the four precise parts are the queryable, damage-registered bodies of HULL, TURRET and both TRACKs. Through
+-- M11A hit geometry was a set of invisible boxes (numbers measured against the scaled mesh) that were up to several studs away from the armour:
+-- the turret box stood in the air above the roof and the barrel box floated beside the real, off-centre gun. The boxes remain only as a fallback
+-- when the precise parts are unavailable (model attribute HitFidelity = "BOX").
 local SKIN_ID = "TNK_001"
 local SKIN_SCALE = 1.5
+local SKIN_KEYS = { "hull", "turret", "left", "right" }
 -- Mesh part centres in the template's bounding-box frame (studs, unscaled) and the ring pivot in root space (ground at y = 0).
 local SKIN = {
     hull = { match = "hull", center = V3(0.034, -0.972, 1.465) },
@@ -248,20 +255,32 @@ local SKIN = {
 }
 local SKIN_GROUND = 4.5 -- template bounding box half height: the mesh bottom sits at y = -4.5 in its own frame
 local SKIN_PIVOT = V3(0, 8.2, 2.4)
+-- The gun of TNK_001 is not on the turret's centre line: it sits 2.6 studs to the left and points about 6 deg outward and 10 deg up (axis fitted
+-- to the triangle data; studs as built, i.e. with SKIN_SCALE applied, relative to the turret mesh centre). The muzzle - where shells leave, where
+-- the flash and the telegraph appear - is the real barrel tip.
+local BARREL_TIP = V3(-2.62, 1.27, -11.55)
+local BARREL_AXIS = V3(-0.103, 0.174, -0.979).Unit
+local MUZZLE_AHEAD = 0.5 -- studs beyond the barrel tip
+-- Engine: the rear upper deck of the hull mesh (TankHit.engine), anchored for smoke and fire.
+local ENGINE_ANCHOR = V3(0, 8.4, 6.6)
 
-local function skinPart(b, template: MeshPart, localCF: CFrame, comp: string, parent: BasePart?)
-    local p = template:Clone()
+local function skinPart(b, source: MeshPart, original: MeshPart, localCF: CFrame, comp: string, parent: BasePart?, hit: boolean)
+    local p = source:Clone()
     p.Anchored, p.Massless = false, true
-    p.CanCollide, p.CanQuery, p.CanTouch = false, false, false
+    p.CanCollide, p.CanQuery, p.CanTouch = false, hit, false
     p.CastShadow = true
-    p.Size = template.Size * SKIN_SCALE
+    p.Size = original.Size * SKIN_SCALE
     local host = parent or b.root
     p.CFrame = host.CFrame * localCF
     p.Parent = b.model
     weld(host, p, localCF)
     b.skin[p] = true
+    b.skinSource[p] = original
     b.groups[comp] = b.groups[comp] or { hit = {}, visual = {} }
     table.insert(b.groups[comp].visual, p)
+    if hit then
+        table.insert(b.groups[comp].hit, p)
+    end
     table.insert(b.parts, p)
     return p
 end
@@ -275,6 +294,22 @@ local function findMesh(template: Model, fragment: string): MeshPart?
     return nil
 end
 
+-- Builds the precise hit meshes once (world setup, yields about a second per mesh in parallel). Safe to call repeatedly.
+function TrainingTank.PrepareAssets(): (number, number)
+    local template = AssetLibrary.Template(SKIN_ID)
+    if not template then
+        return 0, 0
+    end
+    local sources = {}
+    for key, spec in pairs(SKIN) do
+        local mesh = findMesh(template, spec.match)
+        if mesh then
+            sources[key] = mesh
+        end
+    end
+    return TankParts.Prepare(sources)
+end
+
 local function buildSkinned(b, tank, template: Model): boolean
     local meshes = {}
     for key, spec in pairs(SKIN) do
@@ -283,35 +318,66 @@ local function buildSkinned(b, tank, template: Model): boolean
             return false
         end
     end
+    local precise = TankParts.Complete(SKIN_KEYS)
+    local function source(key: string): MeshPart
+        return if precise then TankParts.Get(key) :: MeshPart else meshes[key]
+    end
     local pal = tank.palette
     local steel = pal.steel
     local function rootCF(center: Vector3): CFrame
         return CF(center.X * SKIN_SCALE, (center.Y + SKIN_GROUND) * SKIN_SCALE, center.Z * SKIN_SCALE)
     end
-    b.skinned = true
-    skinPart(b, meshes.hull, rootCF(SKIN.hull.center), "HULL")
-    -- Hit boxes (invisible, queryable): fixed deterministic geometry.
+    b.skinned, b.precise = true, precise
+    -- Invisible, queryable fallback box (M11A numbers); only built when the precise meshes are missing.
     local function hitbox(name, size, cf, comp, parent)
         return (add(b, name, size, cf, steel, METAL, { comp = comp, query = true, transparency = 1, cast = false, parent = parent }))
     end
-    hitbox("HullHit", V3(15.5, 5.2, 19), CF(0.05, 5.29, 2.2), "HULL")
-    hitbox("EngineHit", V3(10, 2.0, 7), CF(0, 7.3, 9.0), "ENGINE")
+    skinPart(b, source("hull"), meshes.hull, rootCF(SKIN.hull.center), "HULL", nil, precise)
+    if precise then
+        -- ENGINE has no mesh of its own: TankHit decides from the registered surface point whether a hull hit is the rear engine deck.
+        b.groups.ENGINE = { hit = {}, visual = {} }
+        b.groups.HULL.resolve = function(_, position: Vector3): string
+            local p = b.root.CFrame:PointToObjectSpace(position)
+            return TankHit.HullComponent(p.Y, p.Z)
+        end
+        b.engineAnchor = add(b, "EngineAnchor", V3(0.5, 0.5, 0.5), CF(ENGINE_ANCHOR), steel, METAL, { transparency = 1, cast = false })
+        -- The louvred grilles lie either side of the rear deck: flames show there, where they are not hidden by the turret.
+        b.engineVents = {}
+        for _, side in ipairs({ -1, 1 }) do
+            table.insert(b.engineVents, (add(b, "EngineVent", V3(0.5, 0.5, 0.5), CF(side * 6.4, 7.6, 4.8), steel, METAL, { transparency = 1, cast = false })))
+        end
+    else
+        hitbox("HullHit", V3(15.5, 5.2, 19), CF(0.05, 5.29, 2.2), "HULL")
+        hitbox("EngineHit", V3(10, 2.0, 7), CF(0, 7.3, 9.0), "ENGINE")
+        b.engineAnchor = b.groups.ENGINE.hit[1]
+    end
     for _, side in ipairs({ { "L", "left", -1, V3(-6.4, 2.9, 2.18) }, { "R", "right", 1, V3(6.5, 2.9, 2.17) } }) do
         local tag, key, s, at = side[1], side[2], side[3], side[4]
-        local skin = skinPart(b, meshes[key], rootCF(SKIN[key].center), "TRACK_" .. tag)
-        local hit = hitbox("TrackHit" .. tag, V3(3.2, 5.8, 19.5), CF(at), "TRACK_" .. tag)
-        b.tracks[tag] = { body = skin, hit = hit, shrink = { skin, hit }, wheels = {}, x = at.X, s = s }
+        local skin = skinPart(b, source(key), meshes[key], rootCF(SKIN[key].center), "TRACK_" .. tag, nil, precise)
+        local entry = { body = skin, wheels = {}, x = at.X, s = s, length = skin.Size.Z }
+        if not precise then
+            local hit = hitbox("TrackHit" .. tag, V3(3.2, 5.8, 19.5), CF(at), "TRACK_" .. tag)
+            entry.hit, entry.shrink = hit, { skin, hit }
+        end
+        b.tracks[tag] = entry
     end
-    -- Turret: ring pivot welded to the hull; mesh and hit boxes welded to the pivot so one weld offset yaws everything.
+    -- Turret: ring pivot welded to the hull; the mesh is welded to the pivot so one weld offset yaws everything.
     local pivotCF = CF(SKIN_PIVOT)
     local turretRoot, turretWeld = add(b, "TurretRoot", V3(1, 1, 1), pivotCF, pal.hull, METAL, { transparency = 1 })
     turretRoot.CanCollide = false
     b.turretRoot, b.turretWeld, b.turretBase = turretRoot, turretWeld, pivotCF
-    local meshCenter = rootCF(SKIN.turret.center).Position
-    skinPart(b, meshes.turret, CF(meshCenter - SKIN_PIVOT), "TURRET", turretRoot)
-    hitbox("TurretHit", V3(11.5, 5.4, 15.5), CF(0, 2.6, 0), "TURRET", turretRoot)
-    b.barrel = hitbox("BarrelHit", V3(1.8, 1.8, 8.6), CF(0, 2.8, -10.9), "TURRET", turretRoot)
-    b.muzzleLocal = CF(0, 2.8, -15.6) -- just past the end of the barrel box, turret-root frame
+    local meshCenter = rootCF(SKIN.turret.center).Position - SKIN_PIVOT -- turret mesh centre in the turret-root frame
+    -- Effect anchors on the turret (invisible, non-queryable): the roof vent and the gun mount at the barrel root.
+    b.turretVent = add(b, "TurretVent", V3(0.5, 0.5, 0.5), CF(0.8, 5.3, 1.2), steel, METAL, { parent = turretRoot, transparency = 1, cast = false })
+    b.mantlet = add(b, "GunMount", V3(0.5, 0.5, 0.5), CF(-1.7, 2.3, -6.7), steel, METAL, { parent = turretRoot, transparency = 1, cast = false })
+    skinPart(b, source("turret"), meshes.turret, CF(meshCenter), "TURRET", turretRoot, precise)
+    if not precise then
+        hitbox("TurretHit", V3(11.5, 5.4, 15.5), CF(0, 2.6, 0), "TURRET", turretRoot)
+    end
+    -- Muzzle: the real barrel tip, oriented along the real barrel axis (turret-root frame).
+    local exitPoint = meshCenter + BARREL_TIP + BARREL_AXIS * MUZZLE_AHEAD
+    b.muzzleLocal = CFrame.lookAt(exitPoint, exitPoint + BARREL_AXIS)
+    b.barrelYaw = math.atan2(-BARREL_AXIS.X, -BARREL_AXIS.Z) -- turret yaw that points the barrel (not the turret front) at a target is `want - barrelYaw`
     plate(b, tank, tank.id, V3(2.6, 1.3, 0.2), CF(-6.5, 2.4, 1.6) * ANG(0, math.rad(90), 0), turretRoot, Enum.NormalId.Front)
     plate(b, tank, tank.id, V3(2.6, 1.3, 0.2), CF(6.5, 2.4, 1.6) * ANG(0, math.rad(-90), 0), turretRoot, Enum.NormalId.Front)
     b.beacon = add(b, "TrainingBeacon", V3(0.9, 0.9, 0.9), CF(0, 9.4, 9.5), Color3.fromRGB(255, 168, 58), Enum.Material.Neon, { comp = "HULL", cast = false })
@@ -332,16 +398,77 @@ local function buildGeometry(b, tank)
 end
 
 -- State presentation -----------------------------------------------------------------------------------------------------
+-- Damage is shown with authored variants, never with runtime mesh surgery: a translucent soot shell over a textured mesh (the baked texture
+-- cannot be tinted), posed assemblies (a sagging track, a jammed turret, a thrown turret), a bounded set of welded debris parts, bounded surface
+-- marks, and cosmetic client events (FxBatch -> DestructionFx). Every instance made here is owned by the tank's model, so a reset
+-- (respawn) removes all of it. Gameplay state lives in Rules / DestructibleState; nothing below decides anything.
+
+-- Timeline (delayed beats of a destruction sequence) and pose animation. Both are cleared by construct(), so a rebuilt tank never inherits them.
+local function after(tank, delay: number, fn: () -> ())
+    table.insert(tank.timeline, { at = os.clock() + delay, fn = fn })
+end
+
+local function animate(tank, joint: Weld, to: CFrame, duration: number)
+    for i = #tank.anims, 1, -1 do
+        if tank.anims[i].joint == joint then
+            table.remove(tank.anims, i)
+        end
+    end
+    table.insert(tank.anims, { joint = joint, from = joint.C0, to = to, t0 = os.clock(), dur = math.max(duration, 0.05) })
+end
+
+local function stepTimeline(tank, now: number)
+    local timeline = tank.timeline
+    for i = #timeline, 1, -1 do
+        local item = timeline[i]
+        if item.at <= now then
+            table.remove(timeline, i)
+            item.fn()
+        end
+    end
+    local anims = tank.anims
+    for i = #anims, 1, -1 do
+        local a = anims[i]
+        local f = math.clamp((now - a.t0) / a.dur, 0, 1)
+        if a.joint.Parent then
+            local eased = 1 - (1 - f) ^ 3
+            a.joint.C0 = a.from:Lerp(a.to, eased)
+        end
+        if f >= 1 then
+            table.remove(anims, i)
+        end
+    end
+end
+
+-- A translucent, textureless copy of a textured mesh, welded to it and 1.2 % larger: soot / char that keeps the baked detail visible
+-- underneath. `transparency` 1 = invisible. At most one shell per mesh, so the instance count is bounded by the mesh count.
+local function charShell(b, part: BasePart, transparency: number)
+    local shell = b.shells[part]
+    if not shell then
+        local original = b.skinSource[part]
+        if not original then
+            return
+        end
+        shell = original:Clone()
+        shell.TextureID = ""
+        shell.Material, shell.Color, shell.Transparency = Enum.Material.Slate, Color3.fromRGB(18, 17, 16), 1
+        shell.Anchored, shell.Massless = false, true
+        shell.CanCollide, shell.CanQuery, shell.CanTouch, shell.CastShadow = false, false, false, false
+        shell.Size = part.Size * 1.012
+        shell.CFrame = part.CFrame
+        shell.Parent = b.model
+        weld(part, shell, CFrame.identity)
+        b.shells[part] = shell
+        table.insert(b.parts, shell)
+    end
+    shell.Transparency = math.min(shell.Transparency, transparency)
+end
+
 local function tint(b, parts, amount: number)
     for _, p in ipairs(parts) do
         if p.Parent then
             if b.skin[p] then
-                -- A baked texture cannot be tinted by MeshPart.Color (see assets/README.md): heavy damage strips the texture and
-                -- chars the part; light damage is shown by scorch discs (see mark()).
-                if amount >= 0.45 then
-                    p.TextureID = ""
-                    p.Color = b.tank.palette.hull:Lerp(SOOT, amount)
-                end
+                charShell(b, p, 1 - math.clamp(amount, 0, 0.95) * 0.95)
             else
                 p.Color = (b.base[p] or p.Color):Lerp(SOOT, amount)
             end
@@ -378,7 +505,7 @@ end
 local function wreckLight(part: BasePart)
     local light = Instance.new("PointLight")
     light.Name = "WreckGlow"
-    light.Color, light.Range, light.Brightness, light.Shadows = Color3.fromRGB(255, 130, 50), 22, 2.2, false
+    light.Color, light.Range, light.Brightness, light.Shadows = Color3.fromRGB(255, 130, 50), 16, 1.2, false
     light.Parent = part
     return light
 end
@@ -398,6 +525,37 @@ local NOTICE = {
     TRACK_R = "RIGHT TRACK DISABLED - IMMOBILIZED", ENGINE = "ENGINE DISABLED - IMMOBILIZED",
 }
 
+-- Small welded helper part (debris, patches). Everything made here is non-queryable, non-colliding and massless.
+local function piece(b, name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material, host: BasePart, shape: Enum.PartType?): Part
+    local p = Instance.new("Part")
+    p.Name = name
+    p.Size = size
+    if shape then
+        p.Shape = shape
+    end
+    p.Anchored, p.CanCollide, p.CanQuery, p.CanTouch, p.CastShadow, p.Massless = false, false, false, false, false, true
+    p.Material, p.Color = material, color
+    p.TopSurface, p.BottomSurface = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
+    p.CFrame = cf
+    p.Parent = b.model
+    weld(host, p, host.CFrame:ToObjectSpace(cf))
+    table.insert(b.parts, p)
+    return p
+end
+
+local function hostFor(b, comp: string): BasePart?
+    if comp == "ENGINE" then
+        return b.engineAnchor
+    elseif comp == "TURRET" and b.turretVent then
+        return b.turretVent
+    end
+    return b.groups[comp] and b.groups[comp].hit[1]
+end
+
+-- Track failure: the track sags and skews at the rear, a strand of tread links is thrown out behind it and lies on the ground, the hub sparks and
+-- smokes. The tank stays immobile through Rules (status.mobile), not through anything here. The hit mesh is the track mesh itself, so the
+-- sagging track keeps registering where it visibly is.
+local LINKS_PER_TRACK = TankHit.Limits.linksPerTrack
 local function breakTrack(d, tank, tag: string)
     local b = tank.build
     local t = b.tracks[tag]
@@ -405,14 +563,21 @@ local function breakTrack(d, tank, tag: string)
         return
     end
     t.broken = true
+    local s = t.s
     local body = t.body
-    for _, part in ipairs(t.shrink or { body }) do
-        local weldJoint = part:FindFirstChildOfClass("Weld")
-        local length = part.Size.Z
-        local newLength = length * 0.58
-        local shift = (length - newLength) / 2
-        part.Size = V3(part.Size.X, part.Size.Y, newLength)
-        weldJoint.C0 = weldJoint.C0 * CF(0, -0.3, -shift) * ANG(0, 0, t.s * math.rad(5))
+    local joint = body:FindFirstChildOfClass("Weld")
+    if t.shrink then
+        -- Box fallback (no precise meshes): shorten the track and its box as in M11A.
+        for _, part in ipairs(t.shrink) do
+            local weldJoint = part:FindFirstChildOfClass("Weld")
+            local length = part.Size.Z
+            local newLength = length * 0.58
+            local shift = (length - newLength) / 2
+            part.Size = V3(part.Size.X, part.Size.Y, newLength)
+            weldJoint.C0 = weldJoint.C0 * CF(0, -0.3, -shift) * ANG(0, 0, s * math.rad(5))
+        end
+    elseif joint then
+        animate(tank, joint, joint.C0 * CF(0, -0.6, 1.0) * ANG(math.rad(5.5), s * math.rad(3.2), s * math.rad(-3.5)), TankHit.Sequence.TRACK.animate)
     end
     if t.rear then
         hide(b, t.rear, d)
@@ -422,98 +587,209 @@ local function breakTrack(d, tank, tag: string)
             hide(b, wheel, d)
         end
     end
-    -- A length of broken tread lies behind the vehicle.
-    local strand = Instance.new("Part")
-    strand.Name = "BrokenTread"
-    strand.Size = V3(3.6, 0.25, 10)
-    strand.Anchored, strand.CanCollide, strand.CanQuery, strand.CanTouch, strand.CastShadow = false, false, false, false, false
-    strand.Material, strand.Color = METAL, Color3.fromRGB(32, 32, 34)
-    local localCF = CF(t.x + t.s * 0.5, 0.15, if b.skinned then 17 else 19) * ANG(0, t.s * math.rad(11), math.rad(2))
-    strand.CFrame = b.root.CFrame * localCF
-    strand.Parent = b.model
-    weld(b.root, strand, localCF)
-    table.insert(b.parts, strand)
-    tint(b, b.groups["TRACK_" .. tag].visual, 0.55)
-    table.insert(tank.emitters, sparkEmitter(body, 6))
-    Destructibles.Emit(d, { t = "x", f = "metal", k = "wreck", cf = body.CFrame, s = body.Size, c = Color3.fromRGB(60, 62, 64), mat = METAL, e = 1.1 }, true)
+    -- Hub (rear sprocket) anchor: effects stay with the machine and with the correct side.
+    local hubCF = CF(t.x + s * 0.4, 2.9, 11.2)
+    local hub = piece(b, "TrackHub" .. tag, V3(0.5, 0.5, 0.5), b.root.CFrame * hubCF, SOOT, METAL, b.root)
+    hub.Transparency = 1
+    -- Thrown tread: a ribbon of links from the hub down to the ground and out behind the tank, scattered (bounded: LINKS_PER_TRACK parts per track),
+    -- plus the road wheel that came off with it lying beside the track (two parts).
+    local rng = tank.rng
+    local linkColor = Color3.fromRGB(34, 35, 37)
+    local previousY, previousZ = 2.9, 11.0
+    for i = 1, LINKS_PER_TRACK do
+        local u = (i - 1) / (LINKS_PER_TRACK - 1)
+        local z = 11.6 + u * 11.0 + rng:NextNumber(-0.35, 0.35)
+        local y = 0.16 + 2.6 * (1 - u) ^ 2.6
+        local x = t.x + s * (0.25 + u * 1.6) + rng:NextNumber(-0.5, 0.5) * u
+        local pitch = math.atan2(y - previousY, z - previousZ) + rng:NextNumber(-0.12, 0.12)
+        previousY, previousZ = y, z
+        local cf = b.root.CFrame * CF(x, y + (if i % 4 == 0 then 0.25 else 0), z) * ANG(-pitch, rng:NextNumber(-0.3, 0.3) + s * u * 0.3, rng:NextNumber(-0.35, 0.35) * (0.4 + u))
+        piece(b, "ThrownTread", V3(3.2, 0.24, 1.0), cf, linkColor, METAL, b.root)
+    end
+    local wheelCF = b.root.CFrame * CF(t.x + s * 3.4, 0.75, 15.5) * ANG(math.rad(14) * s, rng:NextNumber(0, math.pi), math.rad(78) * s)
+    piece(b, "LostWheel", V3(0.75, 3.1, 3.1), wheelCF, Color3.fromRGB(46, 48, 50), METAL, b.root, Enum.PartType.Cylinder)
+    piece(b, "LostWheelHub", V3(1.05, 1.2, 1.2), wheelCF, Color3.fromRGB(30, 31, 33), METAL, b.root, Enum.PartType.Cylinder)
+    tint(b, { body }, 0.5)
+    table.insert(tank.emitters, sparkEmitter(hub, 7))
+    table.insert(tank.emitters, Destructibles.SmokeEmitter(hub, 5, 1.8, 22))
+    Destructibles.Emit(d, { t = "x", f = "metal", k = "trackbreak", cf = b.root.CFrame * hubCF, s = V3(3.6, 4.4, 4), c = Color3.fromRGB(60, 62, 64), mat = METAL, e = 1.3, v = b.root.CFrame.Position + b.root.CFrame.LookVector * 40, side = s }, true)
 end
 
+-- Turret failure: the ring jams a few degrees off-line and the turret slumps nose-down (the gun cannot be laid), the roof vents smoke and sparks and the
+-- gun mount flashes. Aiming and firing stop through Rules (turretOperational); the turret is NOT thrown off: that is reserved for hull destruction.
 local function disableTurret(d, tank)
     local b = tank.build
     tank.scan = false
-    b.turretWeld.C0 = b.turretBase * ANG(0, tank.turretYaw or 0, 0) * CF(0, -0.15, 0.2) * ANG(math.rad(if b.skinned then -8 else 4), 0, math.rad(-3))
-    if b.barrel and b.barrel.Parent and not b.skinned then
-        local barrelWeld = b.barrel:FindFirstChildOfClass("Weld")
-        local pivot = CF(0, 1.7, -5.9)
-        -- Drooping, bent barrel: rotate about the mantlet.
-        barrelWeld.C0 = pivot * ANG(math.rad(-17), 0, math.rad(4)) * pivot:Inverse() * barrelWeld.C0
-        local brakeWeld = b.brake and b.brake:FindFirstChildOfClass("Weld")
-        if brakeWeld then
-            brakeWeld.C0 = pivot * ANG(math.rad(-17), 0, math.rad(4)) * pivot:Inverse() * brakeWeld.C0
+    local yaw = tank.turretYaw or 0
+    if b.skinned then
+        animate(tank, b.turretWeld, b.turretBase * ANG(0, yaw + math.rad(7), 0) * CF(0, -0.35, 0.5) * ANG(math.rad(-11), 0, math.rad(-5)), TankHit.Sequence.TURRET.animate)
+    else
+        b.turretWeld.C0 = b.turretBase * ANG(0, yaw, 0) * CF(0, -0.15, 0.2) * ANG(math.rad(4), 0, math.rad(-3))
+        if b.barrel and b.barrel.Parent then
+            local barrelWeld = b.barrel:FindFirstChildOfClass("Weld")
+            local pivot = CF(0, 1.7, -5.9)
+            -- Drooping, bent barrel: rotate about the mantlet.
+            barrelWeld.C0 = pivot * ANG(math.rad(-17), 0, math.rad(4)) * pivot:Inverse() * barrelWeld.C0
+            local brakeWeld = b.brake and b.brake:FindFirstChildOfClass("Weld")
+            if brakeWeld then
+                brakeWeld.C0 = pivot * ANG(math.rad(-17), 0, math.rad(4)) * pivot:Inverse() * brakeWeld.C0
+            end
         end
     end
     tint(b, b.groups.TURRET.visual, 0.5)
-    table.insert(tank.emitters, sparkEmitter(b.turretRoot, 5))
-    table.insert(tank.emitters, Destructibles.SmokeEmitter(b.turretRoot, 7, 2.2, 20))
-    Destructibles.Emit(d, { t = "x", f = "machine", k = "explosion", cf = b.turretRoot.CFrame, s = V3(8, 3, 9), c = Color3.fromRGB(70, 70, 70), mat = METAL, e = 1.4 }, true)
+    local vent = b.turretVent or b.turretRoot
+    table.insert(tank.emitters, sparkEmitter(b.mantlet or b.turretRoot, 5))
+    table.insert(tank.emitters, Destructibles.SmokeEmitter(vent, 7, 2.2, 20))
+    Destructibles.Emit(d, { t = "x", f = "machine", k = "turretbreak", cf = (b.mantlet or b.turretRoot).CFrame, s = V3(8, 3, 9), c = Color3.fromRGB(70, 70, 70), mat = METAL, e = 1.4, v = (b.turretVent or b.turretRoot).Position }, true)
 end
 
+-- Hull destruction is a short sequence (all beats bounded, all cosmetic beats go through FxBatch, the state change itself is immediate):
+--   0.00 s  shutdown: beacon dark, tracks / turret / engine stop reporting capability, soot over the whole machine, primary explosion at the engine
+--   0.30 s  the turret ring fails: the turret is thrown up and settles tilted on the hull
+--   0.55 s  ammunition cook-off flashes inside the hull
+--   1.00 s  second cook-off; breakup plates are thrown clear and settle on the ground (welded debris, bounded)
+--   1.10 s  persistent wreck: fire at the engine deck, smoke columns, a dying glow
+local WRECK_PLATES = TankHit.Limits.plates
 local function destroyHull(d, tank)
     local b = tank.build
     tank.scan = false
     tank.moving = false
-    tint(b, b.parts, 0.62)
-    if b.beacon.Parent then
-        b.beacon.Color = Color3.fromRGB(40, 20, 12)
-        b.beacon.Material = METAL
-    end
-    -- The turret is flung up and off its ring and settles tilted on the hull.
-    b.turretWeld.C0 = b.turretBase * ANG(0, (tank.turretYaw or 0) + math.rad(35), 0) * CF(2.4, 1.6, 1.4) * ANG(math.rad(-12), 0, math.rad(16))
-    local hull = b.groups.HULL.hit[1]
-    table.insert(tank.emitters, Destructibles.SmokeEmitter(hull, 14, 4.5, 26))
-    local fireHost = b.groups.ENGINE.hit[1] or hull
-    table.insert(tank.emitters, Destructibles.FireEmitter(fireHost, 22, 3.2))
-    table.insert(tank.emitters, Destructibles.SmokeEmitter(b.turretRoot, 8, 3, 24))
-    wreckLight(fireHost)
-    Destructibles.Emit(d, { t = "x", f = "machine", k = "explosion", cf = hull.CFrame * CF(0, 4, 0), s = V3(11, 5, 22), c = Color3.fromRGB(70, 70, 70), mat = METAL, e = 3.0 }, true)
     for _, tag in ipairs({ "L", "R" }) do
         if b.tracks[tag] and not b.tracks[tag].broken then
             tint(b, b.groups["TRACK_" .. tag].visual, 0.6)
         end
     end
+    tint(b, b.parts, if b.skinned then 0.55 else 0.62)
+    if b.beacon.Parent then
+        b.beacon.Color = Color3.fromRGB(40, 20, 12)
+        b.beacon.Material = METAL
+    end
+    local hull = b.groups.HULL.hit[1]
+    local fireHost = b.engineAnchor or hull
+    local center = b.root.CFrame * CF(0, 6, 2)
+    Destructibles.Emit(d, { t = "x", f = "machine", k = "explosion", cf = fireHost.CFrame, s = V3(11, 5, 22), c = Color3.fromRGB(70, 70, 70), mat = METAL, e = 3.0 }, true)
+    after(tank, TankHit.Sequence.HULL.turretThrow, function()
+        if not b.model.Parent then
+            return
+        end
+        animate(tank, b.turretWeld, b.turretBase * ANG(0, (tank.turretYaw or 0) + math.rad(35), 0) * CF(2.6, 0.7, 1.6) * ANG(math.rad(-15), 0, math.rad(20)), TankHit.Sequence.HULL.animate)
+        Destructibles.Emit(d, { t = "x", f = "machine", k = "hullbreak", cf = b.turretRoot.CFrame, s = V3(9, 4, 10), c = Color3.fromRGB(70, 72, 70), mat = METAL, e = 2.0, v = b.turretRoot.Position }, true)
+    end)
+    after(tank, TankHit.Sequence.HULL.cookoff1, function()
+        if b.model.Parent then
+            Destructibles.Emit(d, { t = "x", f = "machine", k = "cookoff", cf = center * CF(-2, 0, -3), s = V3(4, 3, 4), c = Color3.fromRGB(60, 60, 60), mat = METAL, e = 1.0 }, true)
+        end
+    end)
+    after(tank, TankHit.Sequence.HULL.cookoff2, function()
+        if not b.model.Parent then
+            return
+        end
+        Destructibles.Emit(d, { t = "x", f = "machine", k = "cookoff", cf = center * CF(2.5, 0, 3), s = V3(4, 3, 4), c = Color3.fromRGB(60, 60, 60), mat = METAL, e = 1.3 }, true)
+        -- Breakup plates thrown clear: welded to the root so they stay exactly where they settled, as dark as the wreck.
+        local rng = tank.rng
+        for i = 1, WRECK_PLATES do
+            local angle = (i / WRECK_PLATES) * math.pi * 2 + rng:NextNumber(-0.3, 0.3)
+            local radius = rng:NextNumber(9.5, 15)
+            local cf = b.root.CFrame * CF(math.cos(angle) * radius * 0.8, 0.18 + rng:NextNumber(0, 0.1), 2 + math.sin(angle) * radius)
+                * ANG(rng:NextNumber(-0.12, 0.12), rng:NextNumber(0, math.pi), rng:NextNumber(-0.12, 0.12))
+            piece(b, "BreakupPlate", V3(rng:NextNumber(1.6, 3.4), 0.28, rng:NextNumber(1.4, 2.6)), cf, b.tank.palette.hull:Lerp(SOOT, rng:NextNumber(0.35, 0.7)), PLATE, b.root)
+        end
+    end)
+    after(tank, TankHit.Sequence.HULL.wreck, function()
+        if not b.model.Parent then
+            return
+        end
+        table.insert(tank.emitters, Destructibles.SmokeEmitter(hull, 14, 4.5, 26))
+        table.insert(tank.emitters, Destructibles.FireEmitter(fireHost, 22, 3.2))
+        table.insert(tank.emitters, Destructibles.SmokeEmitter(b.turretRoot, 8, 3, 24))
+        wreckLight(fireHost)
+    end)
 end
 
+-- Engine failure: the engine deck blackens and burns, black smoke and a flash. The vehicle is immobilised through Rules.
 local function engineFire(d, tank)
     local b = tank.build
-    local deck = b.groups.ENGINE.hit[1]
-    tint(b, b.groups.ENGINE.visual, 0.6)
+    local deck = b.engineAnchor or b.groups.ENGINE.hit[1]
+    if b.skinned then
+        -- The deck is part of the hull mesh, so the burn is a localized patch (a dark scorched disc with a dim ember core) rather than a shell.
+        local patch = piece(b, "EngineBurn", V3(0.08, 7.2, 7.2), b.root.CFrame * CF(0, 8.55, 6.8) * ANG(0, 0, math.pi / 2), Color3.fromRGB(14, 13, 12), Enum.Material.Slate, b.root, Enum.PartType.Cylinder)
+        patch.Name = "EngineBurn"
+        local ember = piece(b, "EngineEmber", V3(0.05, 3.2, 3.2), b.root.CFrame * CF(0, 8.6, 6.8) * ANG(0, 0, math.pi / 2), Color3.fromRGB(255, 96, 28), Enum.Material.Neon, b.root, Enum.PartType.Cylinder)
+        ember.Transparency = 0.45
+    else
+        tint(b, b.groups.ENGINE.visual, 0.6)
+    end
     table.insert(tank.emitters, Destructibles.SmokeEmitter(deck, 12, 3.4, 26))
-    table.insert(tank.emitters, Destructibles.FireEmitter(deck, 14, 2.4))
-    Destructibles.Emit(d, { t = "x", f = "machine", k = "explosion", cf = deck.CFrame, s = deck.Size, c = Color3.fromRGB(70, 70, 70), mat = METAL, e = 1.6 }, true)
+    for _, vent in ipairs(b.engineVents or { deck }) do
+        table.insert(tank.emitters, Destructibles.FireEmitter(vent, 16, 2.8))
+    end
+    -- Power failure: the training beacon dies with the engine.
+    if b.beacon and b.beacon.Parent then
+        b.beacon.Color = Color3.fromRGB(40, 20, 12)
+        b.beacon.Material = METAL
+    end
+    Destructibles.Emit(d, { t = "x", f = "machine", k = "explosion", cf = deck.CFrame, s = V3(9, 2, 7), c = Color3.fromRGB(70, 70, 70), mat = METAL, e = 1.6 }, true)
 end
 
--- Progressive damage: a dark scorch disc where the hull was struck (welded, so it travels with the vehicle), bounded per tank.
-local MAX_MARKS = 14
+-- Surface marks --------------------------------------------------------------------------------------------------------------
+-- Every registered hit leaves a small welded mark ON the struck surface (the registered point is on the visible armour, so the mark is too),
+-- by weapon class, in two bounded rings so rapid MG fire can never erase the craters a Mauler left:
+--   MG     a bright-rimmed pit (many, small, recycled oldest first)
+--   LASER  a charred ring with a molten dot that cools (few)
+--   HEAVY  a dished crater with a lighter rim, two radial cracks and a torn plate lip (fewer, larger)
+local MAX_PITS, MAX_CRATERS, CRATER_PARTS = TankHit.Limits.pits, TankHit.Limits.craters, TankHit.Limits.craterParts
+local function discAt(b, name: string, host: BasePart, position: Vector3, normal: Vector3, diameter: number, color: Color3, material: Enum.Material, lift: number): Part
+    local cf = CFrame.lookAt(position + normal * lift, position + normal * 2) * ANG(0, math.pi / 2, 0)
+    return piece(b, name, V3(0.07, diameter, diameter), cf, color, material, host, Enum.PartType.Cylinder)
+end
+
+local function retire(list, limit: number)
+    while #list >= limit do
+        local old = table.remove(list, 1)
+        if old.Parent then
+            old:Destroy()
+        end
+    end
+end
+
 local function mark(tank, comp: string, position: Vector3, normal: Vector3, class: string)
     local b = tank.build
-    if #tank.marks >= MAX_MARKS or os.clock() - tank.lastMark < 0.18 then
+    local now = os.clock()
+    if now - (tank.lastMark[class] or -100) < (if class == "MG" then 0.12 else 0.18) then
         return
     end
-    tank.lastMark = os.clock()
+    tank.lastMark[class] = now
     local host = if comp == "TURRET" then b.turretRoot else b.root
-    local diameter = if class == "HEAVY" then 2.6 elseif class == "LASER" then 1.4 else 0.8
-    local disc = Instance.new("Part")
-    disc.Name = "Scorch"
-    disc.Shape = Enum.PartType.Cylinder
-    disc.Size = V3(0.08, diameter, diameter)
-    local cf = CFrame.lookAt(position + normal * 0.06, position + normal * 2) * ANG(0, math.pi / 2, 0)
-    disc.CFrame = cf
-    disc.Anchored, disc.CanCollide, disc.CanQuery, disc.CanTouch, disc.CastShadow = false, false, false, false, false
-    disc.Massless = true
-    disc.Material, disc.Color = Enum.Material.Slate, Color3.fromRGB(16, 15, 14)
-    disc.Parent = b.model
-    weld(host, disc, host.CFrame:ToObjectSpace(cf))
-    table.insert(tank.marks, disc)
+    if class == "HEAVY" then
+        retire(tank.craters, MAX_CRATERS * CRATER_PARTS - (CRATER_PARTS - 1)) -- room for one more crater
+        local crater = discAt(b, "Crater", host, position, normal, 2.0, Color3.fromRGB(10, 10, 10), Enum.Material.Slate, 0.05)
+        local rim = discAt(b, "CraterRim", host, position, normal, 2.6, Color3.fromRGB(84, 84, 80), Enum.Material.Metal, 0.03)
+        local base = CFrame.lookAt(position + normal * 0.09, position + normal * 2) * ANG(0, 0, tank.rng:NextNumber(0, math.pi))
+        local crackA = piece(b, "CraterCrack", V3(0.1, 3.4, 0.05), base, Color3.fromRGB(12, 12, 12), Enum.Material.Slate, host)
+        local crackB = piece(b, "CraterCrack", V3(0.1, 2.4, 0.05), base * ANG(0, 0, math.rad(62)), Color3.fromRGB(12, 12, 12), Enum.Material.Slate, host)
+        for _, p in ipairs({ crater, rim, crackA, crackB }) do
+            table.insert(tank.craters, p)
+        end
+    elseif class == "LASER" then
+        retire(tank.burns, TankHit.Limits.burns)
+        local ring = discAt(b, "BurnRing", host, position, normal, 1.4, Color3.fromRGB(16, 15, 14), Enum.Material.Slate, 0.05)
+        local dot = discAt(b, "MoltenDot", host, position, normal, 0.6, Color3.fromRGB(255, 130, 44), Enum.Material.Neon, 0.09)
+        table.insert(tank.burns, ring)
+        task.delay(1.1, function()
+            if dot.Parent then
+                dot.Color = Color3.fromRGB(150, 46, 18)
+            end
+        end)
+        task.delay(2.6, function()
+            if dot.Parent then
+                dot:Destroy() -- the metal has cooled: only the char remains
+            end
+        end)
+    else
+        retire(tank.pits, MAX_PITS)
+        local pit = discAt(b, "Pit", host, position, normal, 0.42, Color3.fromRGB(26, 26, 28), Enum.Material.Metal, 0.04)
+        table.insert(tank.pits, pit)
+    end
 end
 
 local function onStage(d, tank, comp: string, old: string, new: string, position: Vector3, normal: Vector3, class: string)
@@ -524,7 +800,7 @@ local function onStage(d, tank, comp: string, old: string, new: string, position
     end
     if new == "DAMAGED" then
         tint(b, group.visual, 0.22)
-        local host = group.hit[1]
+        local host = hostFor(b, comp)
         if comp == "HULL" then
             table.insert(tank.emitters, Destructibles.SmokeEmitter(host, 4, 1.8, 10))
         elseif comp == "ENGINE" then
@@ -532,7 +808,7 @@ local function onStage(d, tank, comp: string, old: string, new: string, position
         else
             table.insert(tank.emitters, sparkEmitter(host, 2))
         end
-        Destructibles.Emit(d, { t = "s", f = "metal", p = position, n = normal, w = class, e = 1 }, true)
+        Destructibles.Emit(d, { t = "s", f = "metal", p = position, n = normal, w = class, c = comp, e = 1 }, true)
         return
     end
     if new ~= "DESTROYED" then
@@ -557,6 +833,9 @@ local function onStage(d, tank, comp: string, old: string, new: string, position
     end
     if not status.mobile then
         tank.moving = false
+        for _, host in pairs(b.dust or {}) do
+            host.Enabled = false -- an immobilised machine kicks up no track dust (update() only toggles on a change of `moving`)
+        end
     end
 end
 
@@ -594,12 +873,28 @@ local function steer(tank, target: Vector3, speed: number, turnRate: number, dt:
     return distance
 end
 
+local KICK_TIME = 0.7
+-- Hit reaction (M11B): a heavy round rocks the whole machine on its suspension (a damped tilt away from the shooter, about 1 degree, 0.7 s). Visual
+-- and bounded: it moves only the root's CFrame, never the logical position, yaw or any hit rule; a wreck does not rock.
+function TrainingTank.Kick(tank, class: string, origin: Vector3?, position: Vector3)
+    if class ~= "HEAVY" or tank.status.destroyed or not tank.build or not tank.build.model.Parent then
+        return
+    end
+    local travel = if origin then position - origin else -tank.build.root.CFrame.LookVector
+    local flat = V3(travel.X, 0, travel.Z)
+    if flat.Magnitude < 0.1 then
+        return
+    end
+    tank.kick = { t0 = os.clock(), axis = UP_REF:Cross(flat.Unit), mag = math.rad(1.2) }
+end
+
 local function update(d, tank, dt: number, t: number)
     local status = tank.status
     local b = tank.build
     if not b or not b.model.Parent then
         return
     end
+    stepTimeline(tank, os.clock())
     -- Dust follows motion; both emitters toggle only on change.
     local moving = false
     local combat = tank.control == "combat"
@@ -635,6 +930,19 @@ local function update(d, tank, dt: number, t: number)
         local want = math.sin(t * tank.scanRate + tank.scanPhase) * math.rad(34) + tank.turretBias
         tank.turretYaw += math.clamp(Math.wrap(want - tank.turretYaw), -math.rad(45) * elapsed, math.rad(45) * elapsed)
         b.turretWeld.C0 = b.turretBase * ANG(0, tank.turretYaw, 0)
+    end
+    -- Hit reaction: a damped rock about the base point (applied after any steering this frame, removed exactly when it ends).
+    local kick = tank.kick
+    if kick then
+        local age = os.clock() - kick.t0
+        local base = CF(tank.position)
+        if age >= KICK_TIME or d.resetting then
+            tank.kick = nil
+            b.root.CFrame = base * ANG(0, tank.yaw, 0)
+        else
+            local theta = kick.mag * math.exp(-age * 6.5) * math.cos(age * 26)
+            b.root.CFrame = base * CFrame.fromAxisAngle(kick.axis, theta) * ANG(0, tank.yaw, 0)
+        end
     end
 end
 
@@ -682,10 +990,15 @@ local function construct(d, tank)
     for name, unit in pairs(tank.units) do
         tank.comps[name] = { unit = unit }
         for _, part in ipairs(b.groups[name].hit) do
-            Destructibles.IndexPart(d, tank, name, part)
+            Destructibles.IndexPart(d, tank, name, part, b.groups[name].resolve)
         end
     end
-    tank.emitters, tank.marks, tank.lastMark = {}, {}, -100
+    tank.emitters, tank.lastMark = {}, {}
+    tank.pits, tank.burns, tank.craters = {}, {}, {}
+    tank.timeline, tank.anims = {}, {}
+    tank.rng = Random.new(7000 + #tank.id * 131 + (string.byte(tank.id, #tank.id) or 0))
+    tank.barrelYaw = b.barrelYaw or 0
+    b.model:SetAttribute("HitFidelity", if b.precise then "PRECISE" elseif b.skinned then "BOX" else "PROCEDURAL")
     tank.position, tank.yaw = tank.spawnCF.Position, math.atan2(-tank.spawnCF.LookVector.X, -tank.spawnCF.LookVector.Z)
     tank.turretYaw = tank.turretBias
     b.turretWeld.C0 = b.turretBase * ANG(0, tank.turretBias, 0)
@@ -728,8 +1041,8 @@ function TrainingTank.Create(d, spec)
         spawnCF = spec.cf, palette = TrainingTank.PALETTES[spec.palette or "OLIVE"],
         turretBias = math.rad(spec.turretYaw or 0), scanRate = spec.scan or 0, scanPhase = math.random() * 6,
         patrol = if spec.patrol then { points = spec.patrol.points, speed = spec.patrol.speed or 5, turnRate = spec.patrol.turnRate or math.rad(22), index = 1, step = 1 } else nil,
-        onStage = onStage, onHit = function(_, tank, comp, position, normal, class) mark(tank, comp, position, normal, class) end,
-        update = update, respawn = respawn, parts = {}, marks = {}, lastMark = -100,
+        onStage = onStage, onHit = function(_, tank, comp, position, normal, class, context) mark(tank, comp, position, normal, class) TrainingTank.Kick(tank, class, context and context.origin, position) end,
+        update = update, respawn = respawn, parts = {}, lastMark = {},
     }
     construct(d, tank)
     table.insert(d.objects, tank)

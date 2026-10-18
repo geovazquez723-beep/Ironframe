@@ -12,7 +12,7 @@
 --                geometry is the player's (Rig.Solve + Geometry.Mount). Rounds are swept projectiles owned by TankCombat's bolt manager
 --                (world hits through Destructibles.Hit, player hits through the pulse shield and BastionDamage), never instant hits.
 --   damage       MechDamage / BastionDamage: six regions with the Bastion's consequences. Hits arrive through Destructibles.Hit on tight
---                per-region hit volumes (see VOLUMES), then the P-01 shield, then armour, then the region.
+--                fitted compound hit volumes (MechHit / VolumeHit), then the P-01 shield, then armour, then the region.
 --   brain        MechBrain (pure) decides; this file measures the senses and carries out the orders.
 --
 -- Pilot safety: the only valid target is the one TankCombat.TargetOf returns (deployed, operational, in the district, core intact).
@@ -39,6 +39,7 @@ local Locomotion = require(script.Parent.Locomotion)
 local EnergySystems = require(script.Parent.EnergySystems)
 local BastionDamage = require(script.Parent.BastionDamage)
 local Destructibles = require(script.Parent.Destructibles)
+local MechHit = require(script.Parent.MechHit) -- M11B
 
 local EnemyMech = {}
 
@@ -58,26 +59,10 @@ function EnemyMech.Init(options)
 end
 
 -- Hit volumes -----------------------------------------------------------------------------------------------------------------
--- { region, joint, offset (joint frame), size }. Placed once from the rig's rest pose in the chassis frame and carried with the
--- chassis, so what the player's weapons can hit matches what is on screen: a centre-mass shot lands on the torso (CORE), the
--- backpack REACTOR is only reachable from behind or the flanks, arms and legs are separate small targets.
-local VOLUMES = {
-    { "CORE", "Torso", CF(0, 2.6, -0.9), V3(9.6, 7.8, 5.2) },
-    { "CORE", "Hip", CF(0, 0.4, 0), V3(6.6, 3.2, 6.0) },
-    { "CORE", "Head", CF(0, 1.4, -0.2), V3(3.6, 5.4, 3.8) },
-    { "REACTOR", "Torso", CF(0, 4.2, 3.4), V3(7.0, 8.0, 3.2) },
-}
-for _, tag in ipairs({ "L", "R" }) do
-    local s = if tag == "L" then -1 else 1
-    table.insert(VOLUMES, { "ARM_" .. tag, "Shoulder" .. tag, CF(0, -2.2, 0), V3(3.4, 6.0, 3.8) })
-    table.insert(VOLUMES, { "ARM_" .. tag, "Elbow" .. tag, CF(0, -1.8, -0.3), V3(3.2, 5.0, 3.8) })
-    table.insert(VOLUMES, { "ARM_" .. tag, "Elbow" .. tag, CF(0, -3.4, -3.4), V3(2.4, 2.4, 7.4) })
-    table.insert(VOLUMES, { "ARM_" .. tag, "Torso", CF(s * 5.3, 6.3, 0.1), V3(4.4, 2.6, 5.6) })
-    table.insert(VOLUMES, { "LEG_" .. tag, "Thigh" .. tag, CF(0, -1.9, 0.3), V3(3.6, 4.8, 4.4) })
-    table.insert(VOLUMES, { "LEG_" .. tag, "Knee" .. tag, CF(0, -1.9, 0.3), V3(3.4, 4.8, 4.2) })
-    table.insert(VOLUMES, { "LEG_" .. tag, "Ankle" .. tag, CF(0, -0.6, -0.8), V3(3.6, 2.4, 5.2) })
-end
-EnemyMech.VOLUMES = VOLUMES
+-- M11B: fitted, not placed. MechHit.Build turns every armour / frame / joint / reactor / weapon part of the built rig into one oriented box in the
+-- chassis frame (rest pose), classified into the damage region the rest of the game uses. The M10C hand-placed boxes (18) were 1-2 studs off the
+-- drawn armour on average and up to 6 away; the fitted set follows the visible parts (see docs/M11B_PHYSICAL_COMBAT_FIDELITY.md). The volumes are plain
+-- tables carried with the chassis: no parts exist, nothing replicates when ROOK moves, and weapons reach them through Destructibles.Probe.
 
 local HIT_FX = { CORE = "metal", ARM_L = "machine", ARM_R = "machine", LEG_L = "machine", LEG_R = "machine", REACTOR = "machine" }
 local REGION_NAME = CombatConfig.mech.names
@@ -201,44 +186,31 @@ local function weather(model: Model, rng: Random)
 end
 
 local function buildVolumes(rook)
-    local holder = Instance.new("Folder")
-    holder.Name = "HitVolumes"
-    holder.Parent = rook.model
-    local rest = MechRig.Solve(CFrame.identity, nil)
-    rook.volumes = {}
-    for _, v in ipairs(VOLUMES) do
-        local part = Instance.new("Part")
-        part.Name = "Hit_" .. v[1]
-        part.Size = v[4]
-        part.Transparency = 1
-        part.Anchored = true
-        part.CanCollide, part.CanTouch, part.CastShadow, part.CanQuery = false, false, false, true
-        part.Massless = true
-        part:SetAttribute("Hitbox", true)
-        part:SetAttribute("Region", v[1])
-        part.Parent = holder
-        table.insert(rook.volumes, { part = part, rel = rest[v[2]] * v[3], region = v[1] })
-        Destructibles.IndexPart(rook.district, rook, v[1], part)
-    end
-    rook.volumeParts = table.create(#rook.volumes)
-    rook.volumeFrames = table.create(#rook.volumes)
-    for i, volume in ipairs(rook.volumes) do
-        rook.volumeParts[i] = volume.part
-    end
+    rook.volumes = MechHit.Build(rook.model)
+    -- A weapon ray / shell asks for the nearest fitted-volume contact along its path (see Destructibles.Probe).
+    Destructibles.SetProbe(rook, function(origin: Vector3, direction: Vector3, maxT: number, inflate: number?)
+        if not rook.model.Parent then
+            return nil
+        end
+        return MechHit.Ray(rook.volumes, Locomotion.ChassisCFrame(rook.controller), origin, direction, maxT, inflate)
+    end)
 end
 
-local function placeVolumes(rook, force: boolean?)
-    local cf = Locomotion.ChassisCFrame(rook.controller)
-    local last = rook.volumeAt
-    if not force and last and (cf.Position - last.Position).Magnitude < 0.04 and (cf.LookVector - last.LookVector).Magnitude < 0.002 then
-        return
+-- World position of the middle of the largest volume of `region` (audit and test equipment: where to aim at a given region).
+function EnemyMech.RegionPoint(rook, region: string): Vector3?
+    local best, bestVolume = nil, -1
+    for _, box in ipairs(MechHit.Boxes(rook.volumes)) do
+        if box.region == region then
+            local v = box.size.X * box.size.Y * box.size.Z
+            if v > bestVolume then
+                best, bestVolume = box, v
+            end
+        end
     end
-    rook.volumeAt = cf
-    local frames = rook.volumeFrames
-    for i, volume in ipairs(rook.volumes) do
-        frames[i] = cf * volume.rel
+    if not best then
+        return nil
     end
-    workspace:BulkMoveTo(rook.volumeParts, frames, Enum.BulkMoveMode.FireCFrameChanged)
+    return Locomotion.ChassisCFrame(rook.controller) * best.cf.Position
 end
 
 local function validateLattice(rook)
@@ -326,7 +298,6 @@ local function build(d, rook)
     rook.status = "STANDBY"
 
     buildVolumes(rook)
-    placeVolumes(rook, true)
     model.Parent = workspace:FindFirstChild("IronframeMechs") or workspace
     validateLattice(rook)
     EnergySystems.Publish(power, true)
@@ -376,6 +347,11 @@ function EnemyMech.TakeHit(d, rook, region: string, class: string, raw: number, 
     end
     local result = EnergySystems.ResolveImpact(rook.power, { category = category, damage = raw, fromX = ax, fromZ = az }, rook.controller.state.yaw)
     local penetrating = if result then result.penetrating else raw
+    -- What the client needs to draw the interaction: the shield timing and where the path crossed the shield plane (outside the hull).
+    rook.lastShot = { timing = if result then result.timing else "UNGUARDED", pen = penetrating, sp = nil }
+    if result and result.prevented > 0 and origin then
+        rook.lastShot.sp = MechHit.ShieldPoint(Locomotion.ChassisCFrame(rook.controller), position, (position - origin).Unit)
+    end
     local armour = def.structure.resist[region][class] or 1
     local amount = penetrating * armour
     rook.counters.hitsTaken += 1
@@ -397,6 +373,7 @@ function EnemyMech.TakeHit(d, rook, region: string, class: string, raw: number, 
                 local label = REGION_NAME[r] or r
                 if stage == "FAILED" then
                     Destructibles.NoteComponentLost(d)
+                    Destructibles.MechFailure(d, r, EnemyMech.RegionPoint(rook, r) or position)
                     Destructibles.Notice(d, string.format("%s %s DESTROYED", def.callsign, label), nil)
                 elseif stage == "CRITICAL" then
                     Destructibles.Notice(d, string.format("%s %s CRITICAL", def.callsign, label), nil)
@@ -435,12 +412,7 @@ function EnemyMech.Disable(d, rook, reason: string, wreck: boolean)
     setAttr(rook, model, "Disabled", true)
     if wreck then
         setAttr(rook, model, "Wreck", workspace:GetServerTimeNow())
-        local core
-        for _, volume in ipairs(rook.volumes) do
-            if volume.region == "CORE" then
-                core = core or volume.part
-            end
-        end
+        local core = rook.controller.hull -- the chassis carrier part: effects stay with the machine wherever it stands
         if core then
             Destructibles.SmokeEmitter(core, 14, 4, 26)
             Destructibles.FireEmitter(core, 10, 2.4)
@@ -979,7 +951,6 @@ function EnemyMech.Step(d, c, target, trial: boolean, dt: number, now: number)
     -- A wreck or a neutralised unit only needs its pose kept current.
     if rook.down then
         Locomotion.Step(ctrl, dt)
-        placeVolumes(rook)
         publishDistrict(rook, s, now)
         return
     end
@@ -1026,7 +997,6 @@ function EnemyMech.Step(d, c, target, trial: boolean, dt: number, now: number)
     if target and live then
         separate(rook, target)
     end
-    placeVolumes(rook)
 
     -- Published state (change-only attributes; the cockpit and the lamps read these).
     local brain = rook.brain
