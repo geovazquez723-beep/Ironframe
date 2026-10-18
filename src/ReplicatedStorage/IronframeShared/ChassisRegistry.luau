@@ -7,7 +7,8 @@ local ChassisRegistry = {
         dryMass = 19.5,
         baseIntegrity = 1000,
         -- Integrated default generator/capacitor mass is included in dryMass; upgrade mass is additional.
-        defaultSystems = { capacitor = "CAP_STANDARD", shield = "SHIELD_PULSE" },
+        defaultSystems = { capacitor = "CAP_STANDARD", shield = "SHIELD_PULSE", actuators = "ACT_STANDARD" },
+        referenceIntegrity = 1200, -- baseIntegrity + ARMOR_STANDARD: the structure the CombatConfig region health is tuned for
         energy = {
             idle = 8, drive = 20, speed = 14, acceleration = 2.4, turn = 10, braking = 0.35,
             sprintDemand = 100, sprintMultiplier = 1.6, sprintAcceleration = 1.35, coolingScale = 0.6,

@@ -24,6 +24,7 @@ local Brain = require(Shared:WaitForChild("TankBrain"))
 local EnemyConfig = require(Shared:WaitForChild("EnemyConfig"))
 local Destructibles = require(script.Parent.Destructibles)
 local EnemyMech = require(script.Parent.EnemyMech) -- M10C
+local SortieReport = require(script.Parent.SortieReport) -- M11A
 local TrainingTank = require(script.Parent.TrainingTank)
 local Locomotion = require(script.Parent.Locomotion)
 local EnergySystems = require(script.Parent.EnergySystems)
@@ -54,6 +55,12 @@ function TankCombat.Init(options)
         spawnBolt = function(d, spec) return TankCombat.SpawnBolt(d, spec) end,
         weaponFx = options.weaponFx,
         cancelBolts = function(d, rook) TankCombat.CancelFrom(d, rook.def.callsign) end,
+        onDown = function(d, reason)
+            local session = d.owner and options.sessions[d.owner]
+            if session then
+                SortieReport.NoteRookDown(session, reason)
+            end
+        end,
     })
 end
 
@@ -513,6 +520,10 @@ function TankCombat.SetMode(d, mode: string, reason: string?)
     cancelAll(d, c, "CANCEL")
     if mode == "MECH" then
         EnemyMech.OnTrialStart(d) -- every trial begins against a fresh ROOK
+        local session = d.owner and env and env.sessions[d.owner]
+        if session then
+            SortieReport.NoteTrialStart(session)
+        end
     end
     d.folder:SetAttribute("CombatMode", mode)
     d.folder:SetAttribute("CombatReason", reason or "")

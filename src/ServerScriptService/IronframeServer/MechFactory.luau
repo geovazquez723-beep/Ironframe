@@ -12,6 +12,22 @@ local Factory = {}
 
 local BUILDERS = { IF42_BASTION = BastionBuilder }
 local VARIANTS = { BALANCED = "STANDARD", ENERGY = "ENERGY", MISSILE = "MISSILE", ROOK = "ROOK" }
+local PALETTE_OF = { STANDARD = "BALANCED", ENERGY = "ENERGY", MISSILE = "MISSILE", ROOK = "ROOK" }
+
+-- M11A: an engineered Bastion keeps a recognisable, coherent look. The variant follows what is actually mounted: missile pods bring the
+-- ammunition bins, two or more energy weapons the capacitor spires, otherwise the plain general-purpose dressing.
+local function variantFor(presetId: string, loadout): string
+    if VARIANTS[presetId] then
+        return VARIANTS[presetId]
+    end
+    local energy, missile = 0, false
+    for _, id in pairs(loadout.mounts or {}) do
+        local c = require(Shared:WaitForChild("ComponentRegistry"))[id]
+        if c and c.family == "energy" and c.class == "weapon" and c.size >= 2 then energy += 1 end
+        if c and c.family == "missile" then missile = true end
+    end
+    return if missile then "MISSILE" elseif energy >= 2 then "ENERGY" else "STANDARD"
+end
 
 -- options.useAssets = false forces the all-procedural build (tests, and the documented fallback when assets are missing).
 function Factory.Create(ownerUserId, presetId, loadout, position, options)
@@ -28,11 +44,19 @@ function Factory.Create(ownerUserId, presetId, loadout, position, options)
     local rootCF = CFrame.new(position)
     model:SetAttribute("BaseCF", rootCF)
 
+    -- Every mounted weapon is published on the model (the shared rig contract: MechRig reads the mount's weapon for recoil), so a client
+    -- never has to look a loadout up by preset name.
+    for socket, id in pairs(loadout.mounts or {}) do
+        model:SetAttribute("Mount_" .. socket, id)
+    end
+    local variant = variantFor(presetId, loadout)
     local kit = PartKit.new(model, loadout.chassisId)
     builder.Build(kit, {
-        presetId = presetId,
-        variant = VARIANTS[presetId] or "STANDARD",
+        presetId = if VARIANTS[presetId] then PALETTE_OF[variant] else "BALANCED", -- engineered builds keep the olive military palette; only the dressing follows the mounts
+        variant = variant,
         reinforced = loadout.systems and loadout.systems.armor == "ARMOR_REINFORCED",
+        actuators = loadout.systems and loadout.systems.actuators,
+        reactor = loadout.systems and loadout.systems.reactor,
         loadout = loadout,
         useAssets = not (options and options.useAssets == false),
     })

@@ -194,6 +194,23 @@ installAuditInterface = function(sessions: { [Player]: any })
         elseif command == "target" then
             local target = TankCombat.TargetOf(d)
             return target ~= nil
+        -- M11A: the compiled build and what the deployed runtime actually uses (tests compare the two)
+        elseif command == "build" then
+            local session = d.owner and sessions[d.owner]
+            if not session or not session.compiled then
+                return nil
+            end
+            local c, power, ctrl = session.compiled, session.power, session.controller
+            return {
+                label = c.label, loadout = session.loadout, customized = session.customized, stats = c.stats, structure = c.structure, weapons = c.weapons,
+                runtime = {
+                    maxForward = ctrl and ctrl.params.maxForward, turnRate = ctrl and ctrl.params.turnRate, accelForward = ctrl and ctrl.params.accelForward,
+                    capacity = power.config.capacity, baseOutput = power.baseOutput or power.config.output, output = power.config.output, thermalPerEnergy = power.config.thermalPerEnergy,
+                    movementDrive = power.config.movement.drive, damageCapacity = session.damage and session.damage.capacity, damageHealth = session.damage and session.damage.health,
+                    mounts = session.loadout.mounts, topSpeedAttr = session.mech and session.mech:GetAttribute("TopSpeed"), reactorScale = power.reactorScale,
+                },
+                lastSortie = session.lastSortie,
+            }
         -- M10C audit / test commands for ROOK-01. They use the same Destructibles.Hit / shield / brain paths as live play.
         elseif command == "rook" then
             return EnemyMech.Audit(d)

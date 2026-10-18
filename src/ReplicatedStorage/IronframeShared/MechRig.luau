@@ -79,8 +79,12 @@ function MechRig.Apply(rig: Rig, rootCF: CFrame, angles: { [string]: number }?):
     local spec, amount = nil, 0
     local aimed = selected and RigSpec.Sockets[selected] and aim and rig.model:GetAttribute("Deployment") == "ACTIVE"
     if aimed then
-        local preset = Loadouts.Get(rig.model:GetAttribute("PresetId"))
-        spec = preset and Presentation.recoil[preset.mounts[selected]]
+        local mounted = rig.model:GetAttribute("Mount_" .. selected)
+        if not mounted then
+            local preset = Loadouts.Get(rig.model:GetAttribute("PresetId"))
+            mounted = preset and preset.mounts[selected]
+        end
+        spec = mounted and Presentation.recoil[mounted]
         local shotAt = rig.model:GetAttribute("WeaponShotAt") or -100
         local visualSocket = rig.model:GetAttribute("WeaponVisualSocket")
         if visualSocket then shotAt = if visualSocket == selected then rig.model:GetAttribute("WeaponVisualShotAt") or shotAt else -100 end

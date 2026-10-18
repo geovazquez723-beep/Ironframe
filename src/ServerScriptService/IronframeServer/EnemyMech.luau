@@ -51,7 +51,7 @@ local WHISKER_ANGLE = math.rad(32)
 
 EnemyMech.stats = { stepMs = 0, worstMs = 0, steps = 0, losRays = 0, casts = 0 }
 
-local env: { spawnBolt: (any, any) -> any?, weaponFx: RemoteEvent?, cancelBolts: ((any) -> ())? } = { spawnBolt = nil :: any }
+local env: { spawnBolt: (any, any) -> any?, weaponFx: RemoteEvent?, cancelBolts: ((any, any) -> ())?, onDown: ((any, string) -> ())? } = { spawnBolt = nil :: any }
 
 function EnemyMech.Init(options)
     env = options
@@ -415,6 +415,9 @@ function EnemyMech.Disable(d, rook, reason: string, wreck: boolean)
         return
     end
     rook.down, rook.downReason, rook.live, rook.homing = true, reason, false, false
+    if env.onDown then
+        env.onDown(d, reason)
+    end
     rook.status = if wreck then "DISABLED" else "NEUTRALIZED"
     local model = rook.model
     Locomotion.SetLocked(rook.controller, true)

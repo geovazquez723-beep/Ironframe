@@ -63,7 +63,7 @@ corner.Parent = panel
 label(panel, "Brand", "IRONFRAME  /  GARAGE 01", UDim2.fromOffset(288, 28), UDim2.fromOffset(16, 16), Color3.fromRGB(255, 178, 66), 20)
 local heading = label(panel, "Mech", "IF-42 BASTION", UDim2.fromOffset(288, 50), UDim2.fromOffset(16, 55), Color3.fromRGB(236, 245, 249), 19)
 local stats = label(panel, "Stats", "Initializing mech telemetry...", UDim2.fromOffset(287, 140), UDim2.fromOffset(16, 103), Color3.fromRGB(172, 211, 224), 15)
-label(panel, "LoadoutsLabel", "LOADOUT PRESETS", UDim2.fromOffset(288, 28), UDim2.fromOffset(16, 250), Color3.fromRGB(255, 178, 66), 15)
+label(panel, "LoadoutsLabel", "FACTORY PRESETS (RESET ALL SLOTS)", UDim2.fromOffset(288, 28), UDim2.fromOffset(16, 250), Color3.fromRGB(255, 178, 66), 15)
 button(panel, "Balanced", "GENERAL PURPOSE", UDim2.fromOffset(18, 278), function() setPreset:FireServer("BALANCED") end)
 button(panel, "Energy", "PLASMA SPECIALIST", UDim2.fromOffset(18, 324), function() setPreset:FireServer("ENERGY") end)
 button(panel, "Missile", "MISSILE BARRAGE", UDim2.fromOffset(18, 370), function() setPreset:FireServer("MISSILE") end)
@@ -87,7 +87,7 @@ local function display(data)
         panel[name].TextTransparency = if stowed then 0 else 0.55
     end
     -- Cockpit telemetry: authoritative server state republished on the bus (LIVE); subsystems that do not exist stay STANDBY.
-    local loadout = Loadouts.presets[data.presetId]
+    local loadout = data.loadout or Loadouts.presets[data.presetId] -- M11A: the session's actual (possibly engineered) configuration
     Telemetry.Publish("mech.preset", data.presetId)
     Telemetry.Publish("mech.presetOrder", data.presetOrder)
     Telemetry.Publish("mech.state", data.machineState)
@@ -138,6 +138,8 @@ GarageCamera.Start(function()
     return base and base.Position or nil
 end)
 CockpitMode.Start({ garage = GarageCamera, animator = ShowroomAnimator, remotes = remotes })
+-- M11A: the engineering bay (component selection, comparison, install / revert, last sortie)
+require(script.Parent:WaitForChild("EngineeringPanel")).Start(remotes, CockpitMode)
 require(script.Parent.BayClient).Start()
 require(script.Parent.DeploymentClient).Start(remotes, CockpitMode, ShowroomAnimator)
 require(script.Parent.ShieldClient).Start(ShowroomAnimator)

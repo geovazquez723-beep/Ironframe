@@ -42,6 +42,24 @@ local LAMP_COLORS = {
     ENGAGE = Color3.fromRGB(255, 70, 40), REPOSITION = Color3.fromRGB(255, 130, 50), DEFEND = Color3.fromRGB(80, 200, 255),
 }
 
+-- M11A: the gait saturates at the build's own top speed (replicated `TopSpeed`), so a sprint-actuator machine strides further instead of
+-- skating at its limit and a reinforced one is not over-driven. Pure cosmetics: the authoritative speed comes from the server drive.
+local gaitParams = setmetatable({}, { __mode = "k" })
+local function gaitFor(model: Model, spec)
+    local top = model:GetAttribute("TopSpeed")
+    local entry = gaitParams[model]
+    if not top or math.abs(top - spec.gait.refSpeed) < 0.01 then
+        return spec.gait
+    end
+    if not entry or entry.top ~= top then
+        local clone = table.clone(spec.gait)
+        clone.refSpeed = top
+        entry = { top = top, params = clone }
+        gaitParams[model] = entry
+    end
+    return entry.params
+end
+
 local function enemyPose(model: Model, root: CFrame, angles: { [string]: number }, dt: number): (CFrame, { [string]: number })
     local st = enemyStates[model]
     if not st then
@@ -158,7 +176,7 @@ function ShowroomAnimator.Start()
                         local pose, events
                         local steps = math.max(1, math.ceil(math.min(dt, 0.1) * 120))
                         for _ = 1, steps do
-                            pose, events = Gait.Update(g.gait, math.min(dt, 0.1) / steps, v, w, spec.gait)
+                            pose, events = Gait.Update(g.gait, math.min(dt, 0.1) / steps, v, w, gaitFor(model, spec))
                             for _, event in ipairs(events) do
                                 model:SetAttribute("Footsteps", g.gait.steps)
                                 model:SetAttribute("LastFootfall", event.leg)

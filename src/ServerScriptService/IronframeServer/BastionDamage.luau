@@ -98,6 +98,9 @@ function BastionDamage.Hit(session, region: string, amount: number)
         return nil
     end
     local result = Damage.Apply(state, region, amount)
+    for _, applied in pairs(result.applied) do
+        session.received = (session.received or 0) + applied -- running total for the sortie report (the damage model itself resets on repair)
+    end
     BastionDamage.Apply(session)
     BastionDamage.Publish(session)
     if result.coreFailed and not session.coreFailureHandled then

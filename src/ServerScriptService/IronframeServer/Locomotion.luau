@@ -146,9 +146,11 @@ local function makeProbe(p: any)
 end
 
 local chassisCFrame
-function Locomotion.Create(model: Model, chassisId: string, position: Vector3, yaw: number): Controller
+-- `effective` (M11A) is the compiled build's drive parameter table (LoadoutCompiler: chassis limits scaled by the installed actuators and
+-- armour). It is resolved once per deployment; nothing here recompiles. Without it the chassis' own parameters apply, as before.
+function Locomotion.Create(model: Model, chassisId: string, position: Vector3, yaw: number, effective: { [string]: any }?): Controller
     local spec = assert(ChassisRegistry[chassisId], "unknown chassis " .. tostring(chassisId))
-    local params = spec.locomotion
+    local params = effective or spec.locomotion
     assert(params, chassisId .. " has no locomotion parameters")
     local state = Drive.New(position.X, position.Y, position.Z, yaw)
     local hull = Instance.new("Part")

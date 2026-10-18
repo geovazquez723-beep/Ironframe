@@ -19,6 +19,7 @@ local CombatTargets = require(script.Parent.CombatTargets)
 local Destructibles = require(script.Parent.Destructibles)
 local RangeControl = require(script.Parent.RangeControl)
 local TankCombat = require(script.Parent.TankCombat) -- M10B
+local SortieReport = require(script.Parent.SortieReport) -- M11A
 local BastionDamage = require(script.Parent.BastionDamage) -- M10B
 local sessions = {}
 local selfTestResult = { passed = 0, total = 0, failed = {} }
@@ -43,6 +44,8 @@ local DriveInput = remote("RemoteEvent", "DriveInput") -- (throttle, steer), san
 local RequestShield = remote("RemoteEvent", "RequestShield")
 local RequestEnergyTest = remote("RemoteEvent", "RequestEnergyTest")
 local RequestEnergyProfile = remote("RemoteEvent", "RequestEnergyProfile") -- (profileId) validated against EnergyProfiles
+local RequestLoadout = remote("RemoteEvent", "RequestLoadout") -- M11A: { mounts = {socket = id|false}, systems = {slot = id} }, validated by LoadoutCompiler.ApplyRequest
+local RequestLoadoutRevert = remote("RemoteEvent", "RequestLoadoutRevert") -- M11A: swap back to the configuration before the last install
 
 local WeaponIntent = remote("RemoteEvent", "WeaponIntent")
 local WeaponEffects = remote("RemoteEvent", "WeaponEffects")
@@ -75,19 +78,24 @@ local function publicState(player, message)
     if not session then
         return { ready = false, message = "Garage is initializing" }
     end
-    local loadout = Loadouts.presets[session.presetId]
+    local loadout = session.loadout
     return {
         ready = true,
         presetId = session.presetId,
-        presetName = loadout.name,
+        presetName = presetNames[session.presetId] .. (if session.customized then " (ENGINEERED)" else ""),
         presetOrder = Loadouts.order,
         presetNames = presetNames,
-        compiled = Compiler.Compile(loadout),
+        -- M11A: the session's actual configuration and its compiled effective specification (the client compares candidates against it)
+        loadout = Compiler.Clone(loadout),
+        customized = session.customized == true,
+        canRevert = session.previousLoadout ~= nil,
+        lastSortie = session.lastSortie,
+        compiled = session.compiled,
         machineState = session.machineState,
         pilotSafe = session.pilotSafe,
         deployment = session.deployment or "STOWED",
         reactor = Deployment.ReactorFor(session.deployment),
-        canDeploy = (Deployment.ValidateDeploy(session, Compiler.Compile(loadout))),
+        canDeploy = (Deployment.ValidateDeploy(session, session.compiled)),
         diagnostics = {
             tests = selfTestResult,
             rig = Factory.Describe(session.mech),
@@ -126,14 +134,28 @@ local function assemble(player)
     if session.mech then
         session.mech:Destroy()
     end
-    local model = Factory.Create(player.UserId, session.presetId, Loadouts.presets[session.presetId], session.bayPosition)
+    -- M11A: the session owns its loadout (a copy of a factory preset, or the engineered build). It is compiled ONCE here; the deployed
+    -- runtime (energy, drive, structure, weapons) is built from that single result and nothing recompiles per frame.
+    if not session.loadout then
+        session.loadout = Compiler.Clone(Loadouts.presets[session.presetId])
+    end
+    local compiled = Compiler.Compile(session.loadout)
+    if not compiled.valid then
+        warn("[IF] session loadout invalid, restoring the factory preset:", table.concat(compiled.issues, "; "))
+        session.loadout, session.customized = Compiler.Clone(Loadouts.presets[session.presetId]), false
+        compiled = Compiler.Compile(session.loadout)
+    end
+    session.compiled = compiled
+    local model = Factory.Create(player.UserId, if session.customized then "CUSTOM" else session.presetId, session.loadout, session.bayPosition)
     model.Parent = workspace.IronframeMechs
     session.mech = model
-    session.loadout = Loadouts.presets[session.presetId]
     session.machineState = "OPERATIONAL"
-    session.power = EnergySystems.Create(model, Compiler.Compile(session.loadout).energy)
+    model:SetAttribute("BuildLabel", compiled.label)
+    model:SetAttribute("TopSpeed", compiled.locomotion.maxForward)
+    session.power = EnergySystems.Create(model, compiled.energy)
     Weapons.Create(session)
-    BastionDamage.Create(session) -- fresh, fully repaired components for every assembly
+    session.damageCapacity = compiled.structure
+    BastionDamage.Create(session) -- fresh, fully repaired components (at the build's own structure) for every assembly
     EnergySystems.Publish(session.power, true)
     setDeploymentAttributes(session)
     StateChanged:FireClient(player, publicState(player, "Loadout installed"))
@@ -164,6 +186,35 @@ SetPreset.OnServerEvent:Connect(function(player, presetId)
         return
     end
     session.presetId = presetId
+    session.loadout, session.customized, session.previousLoadout = Compiler.Clone(Loadouts.presets[presetId]), false, nil -- a factory preset restores every slot
+    assemble(player)
+end)
+
+-- M11A: engineering. The client sends component ids only; LoadoutCompiler.ApplyRequest validates every field against the registry catalog
+-- (whitelisted sockets / slots, offered components, hardpoint fit, mass and power budgets) and nothing numeric is ever accepted.
+RequestLoadout.OnServerEvent:Connect(function(player, request)
+    local session = sessions[player]
+    if not session or session.machineState ~= "OPERATIONAL" or not Deployment.AllowsLoadoutChange(session.deployment) then return end
+    if os.clock() - session.lastChange < 0.25 then return end
+    session.lastChange = os.clock()
+    local out, why = Compiler.ApplyRequest(session.loadout, request)
+    if not out then
+        StateChanged:FireClient(player, publicState(player, "REJECTED: " .. tostring(why)))
+        return
+    end
+    session.previousLoadout = session.loadout
+    session.loadout = out
+    session.customized = not Compiler.Same(out, Loadouts.presets[session.presetId])
+    assemble(player)
+end)
+
+RequestLoadoutRevert.OnServerEvent:Connect(function(player)
+    local session = sessions[player]
+    if not session or not session.previousLoadout or session.machineState ~= "OPERATIONAL" or not Deployment.AllowsLoadoutChange(session.deployment) then return end
+    if os.clock() - session.lastChange < 0.25 then return end
+    session.lastChange = os.clock()
+    session.loadout, session.previousLoadout = session.previousLoadout, nil
+    session.customized = not Compiler.Same(session.loadout, Loadouts.presets[session.presetId])
     assemble(player)
 end)
 
@@ -180,6 +231,7 @@ local function runEjection(player, session, forced)
     -- SAFETY INVARIANT (enforced inside Ejection.Run): pilotSafe is set before any hook below runs.
     Ejection.Run(session, {
         onPilotSafe = function()
+            SortieReport.Finish(session, if forced then "EJECTED - CORE FAILURE" else "EJECTED")
             session.mech:SetAttribute("State", "PILOT_EVACUATED")
             pcall(Weapons.Cancel, session)
             if session.power then pcall(EnergySystems.Cancel, session.power) end
@@ -290,6 +342,7 @@ local function finishDock(player, session)
         session.controller = nil
     end
     if Deployment.Transition(session, "STOWED") then
+        SortieReport.Finish(session, "DOCKED")
         BastionDamage.Repair(session) -- the hangar rebuilds every component between sorties
         session.deployAt, session.recallAt, session.dockUntil = nil, nil, nil
         BayControl.SetDoors(session.bay, false)
@@ -304,7 +357,7 @@ RequestDeploy.OnServerEvent:Connect(function(player)
     local session = sessions[player]
     if not session or os.clock() - session.lastDeploy < 1 then return end
     session.lastDeploy = os.clock()
-    local compiled = Compiler.Compile(Loadouts.presets[session.presetId])
+    local compiled = session.compiled
     local ok, reason = Deployment.ValidateDeploy(session, compiled)
     if not ok then
         notify(player, "DEPLOY REFUSED: " .. tostring(reason))
@@ -312,8 +365,9 @@ RequestDeploy.OnServerEvent:Connect(function(player)
         return
     end
     Deployment.Transition(session, "DEPLOYING")
-    session.controller = Locomotion.Create(session.mech, session.mech:GetAttribute("ChassisId"), session.bayPosition, 0)
+    session.controller = Locomotion.Create(session.mech, session.mech:GetAttribute("ChassisId"), session.bayPosition, 0, compiled.locomotion)
     session.controller.energySystems = session.power
+    SortieReport.Begin(session)
     EnergySystems.ResetProfile(session.power)
     BastionDamage.Apply(session)
     session.deployAt = os.clock() + math.max(Deployment.STARTUP_TIME, BayControl.DOOR_TIME)
@@ -395,6 +449,7 @@ RunService.Heartbeat:Connect(function(dt)
         end
         if c and session.machineState == "OPERATIONAL" then
             active += 1
+            SortieReport.Tick(session, dt)
             local state = session.deployment
             if state == "DEPLOYING" and session.deployAt and os.clock() >= session.deployAt then
                 if Deployment.Transition(session, "ACTIVE") then

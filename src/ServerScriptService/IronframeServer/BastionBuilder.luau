@@ -476,7 +476,30 @@ local function buildVariantExtras(kit, p, ctx)
     end
 end
 
--- ctx: { presetId, variant, reinforced, loadout }
+-- M11A engineering dressing. Restrained and anchored to existing joints: the sprint actuators add accent collars and a coil strip on each
+-- leg, the high-output reactor a heat-sink rack and a glowing collar behind the existing backpack. (The reinforced armour dressing already
+-- existed: ReinforcedChestPlate / ReinforcedPauldron.) Nothing here moves a socket, a joint or a hit region.
+local function buildEngineeringExtras(kit, p, ctx)
+    if ctx.actuators == "ACT_MOBILITY" then
+        for _, side in ipairs(SIDES) do
+            local s, t = side[2], side[1]
+            kit:cylY("ActuatorCollarA" .. t, "Thigh" .. t, 0.34, 2.9, C(0, -0.9, 0), p.accent, "detail", METAL)
+            kit:cylY("ActuatorCollarB" .. t, "Thigh" .. t, 0.34, 2.9, C(0, -2.9, 0), p.accent, "detail", METAL)
+            kit:cylY("ActuatorCollarC" .. t, "Knee" .. t, 0.3, 2.7, C(0, -1.0, 0), p.accent, "detail", METAL)
+            kit:glow("ActuatorCoil" .. t, "Knee" .. t, V(0.08, 2.4, 0.1), C(s * 1.55, -1.9, -0.6), p.visor, "glow")
+            kit:box("ActuatorShroud" .. t, "Knee" .. t, V(0.5, 1.6, 1.2), C(s * 1.28, -1.9, 0.9), p.dark, "frame", METAL)
+        end
+    end
+    if ctx.reactor == "CORE_260" then
+        for i = 0, 4 do
+            kit:box("HeatSinkFin" .. i, "Torso", V(0.14, 4.6, 1.3), C(-2.0 + i, 3.2, 5.0), p.steel, "reactor", METAL)
+        end
+        kit:box("HeatSinkSpine", "Torso", V(4.6, 0.3, 1.4), C(0, 5.45, 5.0), p.dark, "reactor", METAL)
+        kit:cylZ("ReactorCollar", "Torso", 0.22, 2.4, C(0, 3.2, 4.58), p.glow, "glow", Enum.Material.Neon)
+    end
+end
+
+-- ctx: { presetId, variant, reinforced, actuators, reactor, loadout }
 function Bastion.Build(kit, ctx)
     local p = Bastion.Palette(ctx.presetId)
     kit.useAssets = ctx.useAssets ~= false
@@ -493,6 +516,7 @@ function Bastion.Build(kit, ctx)
         buildLeg(kit, p, side, ctx)
     end
     buildVariantExtras(kit, p, ctx)
+    buildEngineeringExtras(kit, p, ctx)
     kit:addLinks(p.dark, p.steel)
 
     for _, socketName in ipairs(RigSpec.SocketOrder) do
